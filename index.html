@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Crédito Rural — Mapa (MTS)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { position: absolute; inset: 0; }
+    .toolbar {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      background: #ffffffcc; backdrop-filter: blur(4px);
+      border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px;
+      font: 12px system-ui; box-shadow: 0 1px 2px rgba(0,0,0,.08);
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .toolbar input[type="text"] {
+      width: 260px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+    }
+    .toolbar label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+    .mapboxgl-popup { max-width: 460px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .mapboxgl-popup table { border-collapse: collapse; width: 100%; }
+    .mapboxgl-popup th, .mapboxgl-popup td { padding: 4px 6px; vertical-align: top; }
+    .mapboxgl-popup th { width: 38%; text-align: right; color: #555; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="toolbar">
+  <input id="search" placeholder="Buscar por ID CAR (ex.: PA1502…)" />
+  <button id="zoom-br">Amazônia/BR</button>
+
+  <!-- Toggles -->
+  <label><input type="checkbox" id="toggle-ti" checked /> Terras Indígenas</label>
+  <label><input type="checkbox" id="toggle-uc" checked /> Unidades de Conservação</label>
+
+  <span id="layerName" style="color:#666"></span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoiaW5mb2FtYXpvbmlhIiwiYSI6ImNtNzRxN2lmODBjOTYya29tbDhsYnJwMDEifQ.xfHyTw_HCoxQzI0TNVYCHg';
+
+const TILESET   = 'infoamazonia.credito';
+const STYLE_URL = 'mapbox://styles/infoamazonia/cmhavswvo002u01s19eakho0b';
+
+// Popup fields
+const POPUP_FIELDS = [
+  ['ID CAR', 'id_car'],
+  ['Cod. Imóvel', 'cod_imovel'],
+  ['Município', 'municipio'],
+  ['Total em Crédito Rural (R$)', 'total_CR'],
+  ['Embargos (qtd)', 'embargo_count'],
+  ['Área Embargada (ha)', 'embargo_area_ha'],
+  ['Autuado por embargo', 'emb_nome'],
+  ['Desmatamento (ha)', 'Desmatamento_ha'],
+  ['UC', 'UC'],
+  ['TI', 'TI'],
+  ['Área afetada', 'area_afetada'],
+  ['Focos de incêncio (qtd)', 'focos_count'],
+  ['Anos com queimadas', 'focos_anos'],
+  ['valor_parcela_credito', 'valor_parcela_credito'],
+  ['CNPJ Instituição', 'cnpj_instituicao']
+];
+
+const fmtNum = (v) => {
+  const n = Number(v);
+  return isFinite(n) ? n.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : (v ?? '').toString();
+};
+const safe = (x) => (x === null || x === undefined || x === '' ? '—' : String(x));
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: STYLE_URL,
+  center: [-60, -6],
+  zoom: 4.36,
+  projection: 'mercator'
+});
+
+// Caso você saiba os IDs exatos dos layers de TI/UC, pode definir aqui:
+const KNOWN_TI_LAYER_IDS = []; // ex.: ['ti-fill','ti-outline']
+const UC_MATCH_TEXT = 'unidades-de-conservacao-mma-cnuc-fev-2024'; // termo fornecido
+
+async function fetchVectorLayerId(tilesetId) {
+  const url = `https://api.mapbox.com/v4/${tilesetId}.json?secure&access_token=${mapboxgl.accessToken}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Falha ao consultar metadata do tileset (${res.status})`);
+  const meta = await res.json();
+  const vls = (meta.vector_layers || []).map(v => v.id);
+  if (!vls.length) throw new Error('Nenhum vector_layer encontrado no tileset.');
+  return vls[0];
+}
+
+// Descobre camadas já no STYLE:
+function getStyleLayerIdsByRegex(regex) {
+  const layers = map.getStyle().layers || [];
+  return layers.map(l => l.id).filter(id => regex.test(id));
+}
+function setLayersVisibility(layerIds, visible) {
+  layerIds.forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+  });
+}
+
+map.on('load', async () => {
+  try {
+    const sourceLayer = await fetchVectorLayerId(TILESET);
+    document.getElementById('layerName').textContent = `Layer: ${sourceLayer}`;
+
+    map.addSource('credito_tiles', { type: 'vector', url: `mapbox://${TILESET}` });
+
+    // Polígonos (cor padrão)
+    map.addLayer({
+      id: 'credito-fill',
+      type: 'fill',
+      source: 'credito_tiles',
+      'source-layer': sourceLayer,
+      minzoom: 0,
+      maxzoom: 24,
+      paint: {
+        'fill-color': '#888888',
+        'fill-opacity': 0.35,
+        'fill-outline-color': '#ffffff'
+      }
+    });
+
+    map.addLayer({
+      id: 'credito-line',
+      type: 'line',
+      source: 'credito_tiles',
+      'source-layer': sourceLayer,
+      minzoom: 0,
+      maxzoom: 24,
+      paint: { 'line-color': '#000', 'line-width': 0.4, 'line-opacity': 0.7 }
+    });
+
+    map.addLayer({
+      id: 'credito-highlight',
+      type: 'line',
+      source: 'credito_tiles',
+      'source-layer': sourceLayer,
+      minzoom: 0,
+      maxzoom: 24,
+      paint: { 'line-color': '#000', 'line-width': 2 },
+      filter: ['==', ['get', 'id_car'], '']
+    });
+
+    let hoveredIdCar = null;
+    map.on('mousemove', 'credito-fill', (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const f = e.features?.[0];
+      if (!f) return;
+      const idc = f.properties?.id_car || '';
+      if (idc !== hoveredIdCar) {
+        hoveredIdCar = idc;
+        map.setFilter('credito-highlight', ['==', ['get', 'id_car'], hoveredIdCar]);
+      }
+    });
+    map.on('mouseleave', 'credito-fill', () => {
+      map.getCanvas().style.cursor = '';
+      hoveredIdCar = null;
+      map.setFilter('credito-highlight', ['==', ['get', 'id_car'], '']);
+    });
+
+    map.on('click', 'credito-fill', (e) => {
+      const p = e.features[0].properties || {};
+      let rows = '';
+      for (const [label, key] of POPUP_FIELDS) {
+        if (p[key] === undefined) continue;
+        const val = /ha|total_cr/i.test(key) ? fmtNum(p[key]) : safe(p[key]);
+        rows += `<tr><th>${label}</th><td>${val}</td></tr>`;
+      }
+      new mapboxgl.Popup({ maxWidth: '460px' })
+        .setLngLat(e.lngLat)
+        .setHTML(`<table>${rows || '<tr><td>Sem atributos.</td></tr>'}</table>`)
+        .addTo(map);
+    });
+
+    // ====== Toggles ======
+    // TI: detecta por regex + conhecidos
+    const tiAuto = getStyleLayerIdsByRegex(/ind[ií]g|terras?_ind[ií]genas|(^|[-_])ti($|[-_])/i);
+    const tiLayers = Array.from(new Set([...KNOWN_TI_LAYER_IDS, ...tiAuto]));
+    const tiCheckbox = document.getElementById('toggle-ti');
+    setLayersVisibility(tiLayers, tiCheckbox.checked);
+    tiCheckbox.addEventListener('change', () => setLayersVisibility(tiLayers, tiCheckbox.checked));
+
+    // UC: tudo que contém o texto informado (case-insensitive)
+    const ucLayers = getStyleLayerIdsByRegex(new RegExp(UC_MATCH_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+    const ucCheckbox = document.getElementById('toggle-uc');
+    setLayersVisibility(ucLayers, ucCheckbox.checked);
+    ucCheckbox.addEventListener('change', () => setLayersVisibility(ucLayers, ucCheckbox.checked));
+
+    // Zoom inicial
+    document.getElementById('zoom-br').addEventListener('click', () => {
+      map.fitBounds([[-74, -17], [-44, 6]], { padding: 40, duration: 600, maxZoom: 4.36 });
+    });
+
+  } catch (err) {
+    console.error(err);
+    alert('Erro ao configurar o tileset/layers. Veja o console.');
+  }
+
+  map.on('error', (e) => console.error('Mapbox error:', e && e.error));
+});
+</script>
+</body>
+</html>
