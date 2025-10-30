@@ -7,64 +7,156 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet" />
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
   <style>
-    html, body { height: 100%; margin: 0; }
-    #map { position: absolute; inset: 0; }
-    .toolbar {
-      position: absolute; top: 12px; left: 12px; z-index: 10;
-      background: #ffffffcc; backdrop-filter: blur(4px);
-      border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px;
-      font: 12px system-ui; box-shadow: 0 1px 2px rgba(0,0,0,.08);
-      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    html, body { height:100%; margin:0; }
+    #map { position:absolute; inset:0; }
+
+    .ui {
+      position:absolute; top:12px; left:12px; z-index:10;
+      display:flex; flex-direction:column; gap:10px;
+      max-width: min(560px, 90vw);
     }
+    .card {
+      background:#ffffffcc; backdrop-filter: blur(4px);
+      border:1px solid #ddd; border-radius:12px; padding:10px 12px;
+      font:12px system-ui; box-shadow:0 1px 2px rgba(0,0,0,.08);
+    }
+    .kpis { display:grid; grid-template-columns: repeat(4, minmax(100px, 1fr)); gap:8px; }
+    .kpi { border:1px solid #eee; border-radius:8px; padding:8px; background:#fff; }
+    .kpi .label { color:#666; font-weight:600; font-size:11px; }
+    .kpi .value { font-size:16px; font-weight:700; margin-top:2px; }
+
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .toolbar input[type="text"] {
-      width: 260px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+      width: 240px; padding:6px 8px; border:1px solid #ccc; border-radius:6px;
+    }
+    .toolbar button {
+      border:1px solid #ccc; background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer;
     }
     .toolbar label { display:flex; align-items:center; gap:6px; cursor:pointer; }
-    .mapboxgl-popup { max-width: 460px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+    .filters { display:flex; flex-wrap:wrap; gap:12px; }
+    .flt { display:flex; align-items:center; gap:6px; }
+    .flt input[type="number"] { width:110px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; }
+    .flt input[type="checkbox"] { transform: translateY(1px); }
+
+    .mapboxgl-popup { max-width: 480px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
     .mapboxgl-popup table { border-collapse: collapse; width: 100%; }
     .mapboxgl-popup th, .mapboxgl-popup td { padding: 4px 6px; vertical-align: top; }
-    .mapboxgl-popup th { width: 38%; text-align: right; color: #555; font-weight: 600; }
+    .mapboxgl-popup th { width: 40%; text-align: right; color: #555; font-weight: 600; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<div class="toolbar">
-  <input id="search" placeholder="Buscar por ID CAR (ex.: PA1502…)" />
-  <button id="zoom-br">Amazônia/BR</button>
+<div class="ui">
+  <!-- KPIs -->
+  <div class="card">
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Total de Crédito (R$)</div>
+        <div class="value" id="kpi-credito">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Desmatamento (ha)</div>
+        <div class="value" id="kpi-desmate">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">CARs visíveis</div>
+        <div class="value" id="kpi-cars">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Com embargo</div>
+        <div class="value" id="kpi-embargos">—</div>
+      </div>
+    </div>
+  </div>
 
-  <!-- Toggles -->
-  <label><input type="checkbox" id="toggle-ti" checked /> Terras Indígenas</label>
-  <label><input type="checkbox" id="toggle-uc" checked /> Unidades de Conservação</label>
+  <!-- Ferramentas -->
+  <div class="card">
+    <div class="toolbar">
+      <input id="search" placeholder="Buscar por ID CAR (ex.: PA1502…)" />
+      <button id="zoom-br">Amazônia/BR</button>
 
-  <span id="layerName" style="color:#666"></span>
+      <!-- toggles para TI/UC que já existem no estilo base -->
+      <label><input type="checkbox" id="toggle-ti" checked> Terras Indígenas</label>
+      <label><input type="checkbox" id="toggle-uc" checked> Unidades de Conservação</label>
+
+      <span id="layerName" style="color:#666; margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card">
+    <div class="filters">
+      <div class="flt">
+        <label for="min-credito">Crédito ≥</label>
+        <input type="number" id="min-credito" step="1000" min="0" placeholder="ex.: 100000" />
+      </div>
+      <div class="flt">
+        <label for="min-desmate">Desmate ≥</label>
+        <input type="number" id="min-desmate" step="1" min="0" placeholder="ha (ex.: 50)" />
+      </div>
+      <div class="flt">
+        <label><input type="checkbox" id="only-embargo"> Só com embargo</label>
+      </div>
+      <div class="flt">
+        <label><input type="checkbox" id="only-ti"> Só em TI</label>
+      </div>
+      <div class="flt">
+        <label><input type="checkbox" id="only-uc"> Só em UC</label>
+      </div>
+      <button id="apply-filters">Aplicar filtros</button>
+      <button id="reset-filters">Limpar</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script>
 mapboxgl.accessToken = 'pk.eyJ1IjoiaW5mb2FtYXpvbmlhIiwiYSI6ImNtNzRxN2lmODBjOTYya29tbDhsYnJwMDEifQ.xfHyTw_HCoxQzI0TNVYCHg';
 
+// ======= CONFIG =======
 const TILESET   = 'infoamazonia.credito';
 const STYLE_URL = 'mapbox://styles/infoamazonia/cmhavswvo002u01s19eakho0b';
 
-// Popup fields
+// Campos que existem no recipe (allowed_output) e usamos aqui
+// (ajuste se renomear algo no recipe)
+const FIELDS = {
+  id_car: 'id_car',
+  cod_imovel: 'cod_imovel',
+  municipio: 'municipio',
+  total_CR: 'total_CR',
+  embargo_count: 'embargo_count',
+  embargo_area_ha: 'embargo_area_ha',
+  emb_nome: 'emb_nome',
+  desmate: 'Desmatamento_ha',
+  UC: 'UC',
+  TI: 'TI',
+  area_afetada: 'area_afetada',
+  focos_count: 'focos_count',
+  focos_anos: 'focos_anos',
+  valor_parcela_credito: 'valor_parcela_credito',
+  cnpj_instituicao: 'cnpj_instituicao'
+};
+
+// Popup: label → campo
 const POPUP_FIELDS = [
-  ['ID CAR', 'id_car'],
-  ['Cod. Imóvel', 'cod_imovel'],
-  ['Município', 'municipio'],
-  ['Total em Crédito Rural (R$)', 'total_CR'],
-  ['Embargos (qtd)', 'embargo_count'],
-  ['Área Embargada (ha)', 'embargo_area_ha'],
-  ['Autuado por embargo', 'emb_nome'],
-  ['Desmatamento (ha)', 'Desmatamento_ha'],
-  ['UC', 'UC'],
-  ['TI', 'TI'],
-  ['Área afetada', 'area_afetada'],
-  ['Focos de incêncio (qtd)', 'focos_count'],
-  ['Anos com queimadas', 'focos_anos'],
-  ['valor_parcela_credito', 'valor_parcela_credito'],
-  ['CNPJ Instituição', 'cnpj_instituicao']
+  ['ID CAR', FIELDS.id_car],
+  ['Cod. Imóvel', FIELDS.cod_imovel],
+  ['Município', FIELDS.municipio],
+  ['Total em Crédito Rural (R$)', FIELDS.total_CR],
+  ['Embargos (qtd)', FIELDS.embargo_count],
+  ['Área Embargada (ha)', FIELDS.embargo_area_ha],
+  ['Autuado por embargo', FIELDS.emb_nome],
+  ['Desmatamento (ha)', FIELDS.desmate],
+  ['UC', FIELDS.UC],
+  ['TI', FIELDS.TI],
+  ['Área afetada', FIELDS.area_afetada],
+  ['Focos de incêndio (qtd)', FIELDS.focos_count],
+  ['Anos com queimadas', FIELDS.focos_anos],
+  ['valor_parcela_credito', FIELDS.valor_parcela_credito],
+  ['CNPJ Instituição', FIELDS.cnpj_instituicao]
 ];
 
 const fmtNum = (v) => {
@@ -73,6 +165,7 @@ const fmtNum = (v) => {
 };
 const safe = (x) => (x === null || x === undefined || x === '' ? '—' : String(x));
 
+// ======= MAPA =======
 const map = new mapboxgl.Map({
   container: 'map',
   style: STYLE_URL,
@@ -81,10 +174,7 @@ const map = new mapboxgl.Map({
   projection: 'mercator'
 });
 
-// Caso você saiba os IDs exatos dos layers de TI/UC, pode definir aqui:
-const KNOWN_TI_LAYER_IDS = []; // ex.: ['ti-fill','ti-outline']
-const UC_MATCH_TEXT = 'unidades-de-conservacao-mma-cnuc-fev-2024'; // termo fornecido
-
+// Descobre o source-layer do tileset MTS automaticamente
 async function fetchVectorLayerId(tilesetId) {
   const url = `https://api.mapbox.com/v4/${tilesetId}.json?secure&access_token=${mapboxgl.accessToken}`;
   const res = await fetch(url);
@@ -95,7 +185,7 @@ async function fetchVectorLayerId(tilesetId) {
   return vls[0];
 }
 
-// Descobre camadas já no STYLE:
+// Utilidades pra lidar com camadas TI/UC já no estilo base
 function getStyleLayerIdsByRegex(regex) {
   const layers = map.getStyle().layers || [];
   return layers.map(l => l.id).filter(id => regex.test(id));
@@ -106,47 +196,130 @@ function setLayersVisibility(layerIds, visible) {
   });
 }
 
+// Estado de filtros
+const filtersState = {
+  minCredito: null,
+  minDesmate: null,
+  onlyEmbargo: false,
+  onlyTI: false,
+  onlyUC: false
+};
+
+let SOURCE_LAYER = null;
+
+// Cria expressão de filtro Mapbox a partir do estado
+function buildMapFilter() {
+  const clauses = ['all'];
+
+  if (filtersState.minCredito !== null && !isNaN(filtersState.minCredito)) {
+    clauses.push(['>=', ['to-number', ['get', FIELDS.total_CR], 0], Number(filtersState.minCredito)]);
+  }
+
+  if (filtersState.minDesmate !== null && !isNaN(filtersState.minDesmate)) {
+    clauses.push(['>=', ['to-number', ['get', FIELDS.desmate], 0], Number(filtersState.minDesmate)]);
+  }
+
+  if (filtersState.onlyEmbargo) {
+    clauses.push(['>', ['to-number', ['get', FIELDS.embargo_count], 0], 0]);
+  }
+
+  if (filtersState.onlyTI) {
+    clauses.push(['==', ['downcase', ['get', FIELDS.TI]], 'sim']);
+  }
+
+  if (filtersState.onlyUC) {
+    clauses.push(['==', ['downcase', ['get', FIELDS.UC]], 'sim']);
+  }
+
+  return clauses;
+}
+
+// Atualiza filtros na camada
+function applyFilters() {
+  const expr = buildMapFilter();
+  ['credito-fill', 'credito-line'].forEach(id => {
+    if (map.getLayer(id)) map.setFilter(id, expr);
+  });
+  // força atualização dos KPIs após aplicar filtros
+  scheduleUpdateKPIs();
+}
+
+// KPIs — computa sobre feições renderizadas (viewport + zoom + filtros)
+let kpiTimer = null;
+function scheduleUpdateKPIs() {
+  if (kpiTimer) cancelAnimationFrame(kpiTimer);
+  kpiTimer = requestAnimationFrame(updateKPIs);
+}
+function updateKPIs() {
+  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
+  const seen = new Set(); // evita contar o mesmo CAR duas vezes (tile boundaries)
+  let totalCredito = 0;
+  let totalDesmate = 0;
+  let cars = 0;
+  let comEmbargo = 0;
+
+  for (const f of feats) {
+    const id = f.properties?.[FIELDS.id_car] || f.id || JSON.stringify(f.properties);
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const cr = Number(f.properties?.[FIELDS.total_CR] ?? 0);
+    const dm = Number(f.properties?.[FIELDS.desmate] ?? 0);
+    const emb = Number(f.properties?.[FIELDS.embargo_count] ?? 0);
+
+    totalCredito += isFinite(cr) ? cr : 0;
+    totalDesmate += isFinite(dm) ? dm : 0;
+    cars += 1;
+    if (emb > 0) comEmbargo += 1;
+  }
+
+  document.getElementById('kpi-credito').textContent = isFinite(totalCredito) ? totalCredito.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';
+  document.getElementById('kpi-desmate').textContent = isFinite(totalDesmate) ? totalDesmate.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';
+  document.getElementById('kpi-cars').textContent = cars || '0';
+  document.getElementById('kpi-embargos').textContent = comEmbargo || '0';
+}
+
 map.on('load', async () => {
   try {
-    const sourceLayer = await fetchVectorLayerId(TILESET);
-    document.getElementById('layerName').textContent = `Layer: ${sourceLayer}`;
+    SOURCE_LAYER = await fetchVectorLayerId(TILESET);
+    document.getElementById('layerName').textContent = `Layer: ${SOURCE_LAYER}`;
 
     map.addSource('credito_tiles', { type: 'vector', url: `mapbox://${TILESET}` });
 
-    // Polígonos (cor padrão)
+    // Polígonos com cor padrão (sem escala temática)
     map.addLayer({
       id: 'credito-fill',
       type: 'fill',
       source: 'credito_tiles',
-      'source-layer': sourceLayer,
-      minzoom: 0,
-      maxzoom: 24,
+      'source-layer': SOURCE_LAYER,
+      minzoom: 0, maxzoom: 24,
       paint: {
         'fill-color': '#888888',
         'fill-opacity': 0.35,
         'fill-outline-color': '#ffffff'
-      }
+      },
+      filter: buildMapFilter()
     });
 
     map.addLayer({
       id: 'credito-line',
       type: 'line',
       source: 'credito_tiles',
-      'source-layer': sourceLayer,
-      minzoom: 0,
-      maxzoom: 24,
-      paint: { 'line-color': '#000', 'line-width': 0.4, 'line-opacity': 0.7 }
+      'source-layer': SOURCE_LAYER,
+      minzoom: 0, maxzoom: 24,
+      paint: { 'line-color': '#000', 'line-width': 0.4, 'line-opacity': 0.7 },
+      filter: buildMapFilter()
     });
 
+    // Destaque no hover
     map.addLayer({
       id: 'credito-highlight',
       type: 'line',
       source: 'credito_tiles',
-      'source-layer': sourceLayer,
-      minzoom: 0,
-      maxzoom: 24,
+      'source-layer': SOURCE_LAYER,
+      minzoom: 0, maxzoom: 24,
       paint: { 'line-color': '#000', 'line-width': 2 },
-      filter: ['==', ['get', 'id_car'], '']
+      filter: ['==', ['get', FIELDS.id_car], '']
     });
 
     let hoveredIdCar = null;
@@ -154,50 +327,93 @@ map.on('load', async () => {
       map.getCanvas().style.cursor = 'pointer';
       const f = e.features?.[0];
       if (!f) return;
-      const idc = f.properties?.id_car || '';
+      const idc = f.properties?.[FIELDS.id_car] || '';
       if (idc !== hoveredIdCar) {
         hoveredIdCar = idc;
-        map.setFilter('credito-highlight', ['==', ['get', 'id_car'], hoveredIdCar]);
+        map.setFilter('credito-highlight', ['==', ['get', FIELDS.id_car], hoveredIdCar]);
       }
     });
     map.on('mouseleave', 'credito-fill', () => {
       map.getCanvas().style.cursor = '';
       hoveredIdCar = null;
-      map.setFilter('credito-highlight', ['==', ['get', 'id_car'], '']);
+      map.setFilter('credito-highlight', ['==', ['get', FIELDS.id_car], '']);
     });
 
+    // Popup
     map.on('click', 'credito-fill', (e) => {
       const p = e.features[0].properties || {};
       let rows = '';
       for (const [label, key] of POPUP_FIELDS) {
         if (p[key] === undefined) continue;
-        const val = /ha|total_cr/i.test(key) ? fmtNum(p[key]) : safe(p[key]);
+        const val = /ha|cr$|cr\)|cr\s|\(r\$\)/i.test(label) ? fmtNum(p[key]) : safe(p[key]);
         rows += `<tr><th>${label}</th><td>${val}</td></tr>`;
       }
-      new mapboxgl.Popup({ maxWidth: '460px' })
+      new mapboxgl.Popup({ maxWidth: '480px' })
         .setLngLat(e.lngLat)
         .setHTML(`<table>${rows || '<tr><td>Sem atributos.</td></tr>'}</table>`)
         .addTo(map);
     });
 
-    // ====== Toggles ======
-    // TI: detecta por regex + conhecidos
-    const tiAuto = getStyleLayerIdsByRegex(/ind[ií]g|terras?_ind[ií]genas|(^|[-_])ti($|[-_])/i);
-    const tiLayers = Array.from(new Set([...KNOWN_TI_LAYER_IDS, ...tiAuto]));
+    // TI/UC toggles (camadas que já existem no STYLE base)
+    const tiLayers = getStyleLayerIdsByRegex(/ind[ií]g|terras?_ind[ií]genas|(^|[-_])ti($|[-_])/i);
+    const ucLayers = getStyleLayerIdsByRegex(/unidades?-?de-?conserva[cç][aã]o|cnuc|conservation/i);
     const tiCheckbox = document.getElementById('toggle-ti');
-    setLayersVisibility(tiLayers, tiCheckbox.checked);
-    tiCheckbox.addEventListener('change', () => setLayersVisibility(tiLayers, tiCheckbox.checked));
-
-    // UC: tudo que contém o texto informado (case-insensitive)
-    const ucLayers = getStyleLayerIdsByRegex(new RegExp(UC_MATCH_TEXT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
     const ucCheckbox = document.getElementById('toggle-uc');
+    setLayersVisibility(tiLayers, tiCheckbox.checked);
     setLayersVisibility(ucLayers, ucCheckbox.checked);
+    tiCheckbox.addEventListener('change', () => setLayersVisibility(tiLayers, tiCheckbox.checked));
     ucCheckbox.addEventListener('change', () => setLayersVisibility(ucLayers, ucCheckbox.checked));
 
-    // Zoom inicial
+    // Busca por ID CAR (Enter)
+    document.getElementById('search').addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      const term = ev.target.value.trim().toUpperCase();
+      if (!term) return;
+      const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] });
+      const match = feats.find(ft => (ft.properties?.[FIELDS.id_car] || '').toUpperCase() === term);
+      if (match) {
+        const b = turf.bbox(match);
+        map.fitBounds(b, { padding: 40, duration: 600 });
+      } else {
+        alert('ID CAR não encontrado na área visível/zoom atual. Aproxime/arraste o mapa e tente novamente.');
+      }
+    });
+
+    // Zoom Amazônia
     document.getElementById('zoom-br').addEventListener('click', () => {
       map.fitBounds([[-74, -17], [-44, 6]], { padding: 40, duration: 600, maxZoom: 4.36 });
     });
+
+    // Conecta filtros
+    document.getElementById('apply-filters').addEventListener('click', () => {
+      const minCr = document.getElementById('min-credito').value;
+      const minDm = document.getElementById('min-desmate').value;
+      filtersState.minCredito = minCr !== '' ? Number(minCr) : null;
+      filtersState.minDesmate = minDm !== '' ? Number(minDm) : null;
+      filtersState.onlyEmbargo = document.getElementById('only-embargo').checked;
+      filtersState.onlyTI = document.getElementById('only-ti').checked;
+      filtersState.onlyUC = document.getElementById('only-uc').checked;
+      applyFilters();
+    });
+
+    document.getElementById('reset-filters').addEventListener('click', () => {
+      ['min-credito','min-desmate','only-embargo','only-ti','only-uc'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el.type === 'checkbox') el.checked = false;
+        else el.value = '';
+      });
+      filtersState.minCredito = null;
+      filtersState.minDesmate = null;
+      filtersState.onlyEmbargo = false;
+      filtersState.onlyTI = false;
+      filtersState.onlyUC = false;
+      applyFilters();
+    });
+
+    // Atualiza KPIs em eventos de navegação/zoom/filtros
+    map.on('moveend', scheduleUpdateKPIs);
+    map.on('zoomend', scheduleUpdateKPIs);
+    scheduleUpdateKPIs(); // primeira carga
 
   } catch (err) {
     console.error(err);
