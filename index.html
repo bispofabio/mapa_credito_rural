@@ -41,10 +41,16 @@
     .toolbar button { border:1px solid #ccc; background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; }
     .toolbar label { display:flex; align-items:center; gap:6px; cursor:pointer; }
 
-    .filters { display:flex; flex-wrap:wrap; gap:12px; }
+    .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
     .flt { display:flex; align-items:center; gap:6px; }
-    .flt input[type="number"] { width:110px; padding:4px 6px; border:1px solid #ccc; border-radius:6px; }
     .flt input[type="checkbox"] { transform: translateY(1px); }
+
+    .result-list { margin-top:8px; max-height:240px; overflow:auto; border:1px solid #eee; border-radius:8px; background:#fff; }
+    .result-list table { width:100%; border-collapse:collapse; font-size:12px; }
+    .result-list th, .result-list td { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
+    .result-list tr:hover { background:#f5f5f5; cursor:pointer; }
+    .result-actions { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .result-actions button { border:1px solid #ccc; background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; }
 
     .mapboxgl-popup { max-width: 480px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
     .mapboxgl-popup table { border-collapse: collapse; width: 100%; }
@@ -100,7 +106,8 @@
   <div class="card">
     <div class="toolbar">
       <input id="search" placeholder="Buscar por cód. imóvel (cod_imovel)" />
-      <input id="search-embargo" placeholder="Buscar autuado por embargo (emb_nome)" />
+      <input id="search-embargo" placeholder="Buscar autuado por embargo (emb_nome)" list="embargo-suggestions" />
+      <datalist id="embargo-suggestions"></datalist>
       <button id="zoom-br">Amazônia/BR</button>
       <label><input type="checkbox" id="toggle-ti" checked> Terras Indígenas</label>
       <label><input type="checkbox" id="toggle-uc" checked> Unidades de Conservação</label>
@@ -109,25 +116,24 @@
 
   <div class="card">
     <div class="filters">
-      <div class="flt">
-        <label for="min-credito">Crédito ≥</label>
-        <input type="number" id="min-credito" step="1000" min="0" placeholder="ex.: 100000" />
-      </div>
-      <div class="flt">
-        <label for="min-desmate">Desmate ≥</label>
-        <input type="number" id="min-desmate" step="1" min="0" placeholder="ha (ex.: 50)" />
-      </div>
-      <div class="flt">
-        <label><input type="checkbox" id="only-embargo"> Só com embargo</label>
-      </div>
-      <div class="flt">
-        <label><input type="checkbox" id="only-ti"> Só em TI</label>
-      </div>
-      <div class="flt">
-        <label><input type="checkbox" id="only-uc"> Só em UC</label>
-      </div>
+      <label class="flt"><input type="checkbox" id="only-embargo"> Só com embargo</label>
+      <label class="flt"><input type="checkbox" id="only-ti"> Só em TI</label>
+      <label class="flt"><input type="checkbox" id="only-uc"> Só em UC</label>
       <button id="apply-filters">Aplicar filtros</button>
       <button id="reset-filters">Limpar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="result-actions">
+      <strong>Resultados filtrados</strong>
+      <button id="download-csv">Baixar CSV</button>
+    </div>
+    <div class="result-list" aria-label="Resultados filtrados">
+      <table>
+        <thead><tr><th>Cod. Imóvel</th><th>Município</th><th>Total CR (R$)</th></tr></thead>
+        <tbody id="result-rows"><tr><td colspan="3">Carregando…</td></tr></tbody>
+      </table>
     </div>
   </div>
 
@@ -208,17 +214,12 @@ function setLayersVisibility(layerIds, visible) {
   layerIds.forEach(id => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none'); });
 }
 
-const filtersState = { minCredito: null, minDesmate: null, onlyEmbargo: false, onlyTI: false, onlyUC: false };
+const filtersState = { onlyEmbargo: false, onlyTI: false, onlyUC: false };
 let SOURCE_LAYER = null;
+let lastResults = [];
 
 function buildMapFilter() {
   const clauses = ['all'];
-  if (filtersState.minCredito !== null && !isNaN(filtersState.minCredito)) {
-    clauses.push(['>=', ['to-number', ['get', FIELDS.total_CR], 0], Number(filtersState.minCredito)]);
-  }
-  if (filtersState.minDesmate !== null && !isNaN(filtersState.minDesmate)) {
-    clauses.push(['>=', ['to-number', ['get', FIELDS.desmate], 0], Number(filtersState.minDesmate)]);
-  }
   if (filtersState.onlyEmbargo) {
     clauses.push(['>', ['to-number', ['get', FIELDS.embargo_count], 0], 0]);
   }
@@ -234,11 +235,68 @@ function buildMapFilter() {
 function applyFilters() {
   const expr = buildMapFilter();
   ['credito-fill', 'credito-line'].forEach(id => { if (map.getLayer(id)) map.setFilter(id, expr); });
-  scheduleUpdateKPIs();
+  scheduleUpdates();
+}
+
+function collectVisibleFiltered() {
+  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
+  const seen = new Set();
+  const rows = [];
+  for (const f of feats) {
+    const id = f.properties?.[FIELDS.cod_imovel] || f.properties?.[FIELDS.id_car];
+    if (!id || seen.has(id)) continue; seen.add(id);
+    rows.push({
+      cod: id,
+      municipio: f.properties?.[FIELDS.municipio] || '—',
+      totalCR: Number(f.properties?.[FIELDS.total_CR]) || 0,
+      feature: f
+    });
+  }
+  return rows;
+}
+
+function renderResultsList() {
+  const tbody = document.getElementById('result-rows');
+  const rows = collectVisibleFiltered();
+  lastResults = rows;
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3">Nenhum resultado na área/filtro atual.</td></tr>';
+    return;
+  }
+  rows.sort((a,b) => b.totalCR - a.totalCR);
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.cod}</td><td>${row.municipio}</td><td>${row.totalCR.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>`;
+    tr.addEventListener('click', () => {
+      try {
+        const b = turf.bbox(row.feature);
+        map.fitBounds(b, { padding: 40, duration: 600 });
+      } catch (e) { console.warn('BBox error', e); }
+    });
+    tbody.appendChild(tr);
+  }
+}
+
+function downloadCSV() {
+  if (!lastResults.length) { alert('Sem resultados para exportar.'); return; }
+  const lines = ['cod_imovel,municipio,total_CR'];
+  lastResults.forEach(r => {
+    const esc = (s) => `"${String(s ?? '').replace(/"/g,'""')}"`;
+    lines.push([esc(r.cod), esc(r.municipio), r.totalCR].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'resultado_filtro.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 let kpiTimer = null;
-function scheduleUpdateKPIs() { if (kpiTimer) cancelAnimationFrame(kpiTimer); kpiTimer = requestAnimationFrame(updateKPIs); }
+function scheduleUpdates() {
+  if (kpiTimer) cancelAnimationFrame(kpiTimer);
+  kpiTimer = requestAnimationFrame(() => { updateKPIs(); renderResultsList(); });
+}
 function updateKPIs() {
   const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
   const seen = new Set();
@@ -365,6 +423,29 @@ function paintGlobalTotals({ totalCAR, somaCredito, somaDesmate, focosTotal, qtd
   }
 }
 
+function updateEmbargoSuggestions(term) {
+  const dl = document.getElementById('embargo-suggestions');
+  dl.innerHTML = '';
+  if (term.length < 3) return;
+  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
+  const seen = new Set();
+  const list = [];
+  for (const f of feats) {
+    const name = (f.properties?.[FIELDS.emb_nome] || '').trim();
+    if (!name) continue;
+    const low = name.toLowerCase();
+    if (!low.includes(term.toLowerCase())) continue;
+    if (seen.has(low)) continue;
+    seen.add(low); list.push(name);
+    if (list.length >= 10) break;
+  }
+  list.sort().forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    dl.appendChild(opt);
+  });
+}
+
 map.on('load', async () => {
   try {
     SOURCE_LAYER = await fetchVectorLayerId(TILESET);
@@ -428,7 +509,9 @@ map.on('load', async () => {
       else { alert('cod_imovel não encontrado na área visível/zoom atual. Aproxime/arraste o mapa e tente novamente.'); }
     });
 
-    document.getElementById('search-embargo').addEventListener('keydown', (ev) => {
+    const embargoInput = document.getElementById('search-embargo');
+    embargoInput.addEventListener('input', (ev) => updateEmbargoSuggestions(ev.target.value.trim()));
+    embargoInput.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Enter') return;
       const term = ev.target.value.trim().toLowerCase(); if (!term) return;
       const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] });
@@ -442,10 +525,6 @@ map.on('load', async () => {
     });
 
     document.getElementById('apply-filters').addEventListener('click', () => {
-      const minCr = document.getElementById('min-credito').value;
-      const minDm = document.getElementById('min-desmate').value;
-      filtersState.minCredito = minCr !== '' ? Number(minCr) : null;
-      filtersState.minDesmate = minDm !== '' ? Number(minDm) : null;
       filtersState.onlyEmbargo = document.getElementById('only-embargo').checked;
       filtersState.onlyTI = document.getElementById('only-ti').checked;
       filtersState.onlyUC = document.getElementById('only-uc').checked;
@@ -453,15 +532,16 @@ map.on('load', async () => {
     });
 
     document.getElementById('reset-filters').addEventListener('click', () => {
-      ['min-credito','min-desmate','only-embargo','only-ti','only-uc'].forEach(id => {
-        const el = document.getElementById(id); if (el.type === 'checkbox') el.checked = false; else el.value = '';
-      });
-      filtersState.minCredito = null; filtersState.minDesmate = null; filtersState.onlyEmbargo = false; filtersState.onlyTI = false; filtersState.onlyUC = false; applyFilters();
+      ['only-embargo','only-ti','only-uc'].forEach(id => { const el = document.getElementById(id); el.checked = false; });
+      filtersState.onlyEmbargo = false; filtersState.onlyTI = false; filtersState.onlyUC = false;
+      applyFilters();
     });
 
-    map.on('moveend', scheduleUpdateKPIs);
-    map.on('zoomend', scheduleUpdateKPIs);
-    scheduleUpdateKPIs();
+    document.getElementById('download-csv').addEventListener('click', downloadCSV);
+
+    map.on('moveend', scheduleUpdates);
+    map.on('zoomend', scheduleUpdates);
+    scheduleUpdates();
 
     await loadGlobalTotals();
 
