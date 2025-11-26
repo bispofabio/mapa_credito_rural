@@ -22,19 +22,19 @@
       border:1px solid #ddd; border-radius:12px; padding:10px 12px;
       font:12px system-ui; box-shadow:0 1px 2px rgba(0,0,0,.08);
     }
-    .kpis { display:grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap:8px; }
-    .kpi { border:1px solid #eee; border-radius:8px; padding:8px; background:#fff; }
-    .kpi .label { color:#666; font-weight:600; font-size:11px; }
-    .kpi .value { font-size:16px; font-weight:700; margin-top:2px; }
-
     .totais h3 { margin:0 0 6px; font:600 13px/1.2 system-ui; color:#333; }
     .totais .row { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-top:1px dashed #e6e6e6; }
     .totais .row:first-child { border-top:0; }
     .totais .row .label { color:#555; }
     .totais .inst-list { margin-top:8px; max-height:220px; overflow:auto; border:1px solid #eee; border-radius:8px; background:#fff; }
     .totais .inst-list table { width:100%; border-collapse:collapse; font-size:12px; }
-    .totais .inst-list th, .totais .inst-list td { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
-    .totais .inst-list th { position:sticky; top:0; background:#fafafa; z-index:1; }
+  .totais .inst-list th, .totais .inst-list td { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
+  .totais .inst-list th { position:sticky; top:0; background:#fafafa; z-index:1; }
+    .inst-filter { margin:8px 0; display:flex; flex-direction:column; gap:4px; font-size:12px; }
+    .inst-filter select { padding:6px 8px; border:1px solid #ccc; border-radius:6px; }
+
+    .top-action { display:flex; justify-content:flex-start; }
+    .btn-zoom { border:1px solid #6aa57a; background:#d6f0dc; color:#1f5a32; border-radius:8px; padding:6px 10px; cursor:pointer; }
 
     .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .toolbar input[type="text"] { width: 240px; padding:6px 8px; border:1px solid #ccc; border-radius:6px; }
@@ -44,6 +44,9 @@
     .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
     .flt { display:flex; align-items:center; gap:6px; }
     .flt input[type="checkbox"] { transform: translateY(1px); }
+    .swatch { width:14px; height:14px; border-radius:4px; display:inline-block; border:1px solid #777; }
+    .swatch-ti { background:#f28cb1; }
+    .swatch-uc { background:#70a5ff; }
 
     .result-list { margin-top:8px; max-height:240px; overflow:auto; border:1px solid #eee; border-radius:8px; background:#fff; }
     .result-list table { width:100%; border-collapse:collapse; font-size:12px; }
@@ -65,6 +68,10 @@
 <div id="map"></div>
 
 <div class="sidebar">
+  <div class="card top-action">
+    <button id="zoom-br" class="btn-zoom">Amazônia/BR</button>
+  </div>
+
   <div class="card totais">
     <h3>Totais (dataset)</h3>
     <div class="row"><span class="label">Total de CAR</span><strong id="tot-car">—</strong></div>
@@ -74,6 +81,12 @@
     <div class="row"><span class="label">Quantidade em Terras Indígenas</span><strong id="tot-ti">—</strong></div>
     <div class="row"><span class="label">Quantidade em Unidades de Conservação</span><strong id="tot-uc">—</strong></div>
 
+    <div class="inst-filter">
+      <label for="inst-filter">Filtrar por Instituição (CNPJ básico)</label>
+      <select id="inst-filter">
+        <option value="">Todas</option>
+      </select>
+    </div>
     <div class="inst-list" aria-label="Quantidade por instituição">
       <table>
         <thead><tr><th>Instituição (CNPJ básico)</th><th>Qtd. CAR</th></tr></thead>
@@ -83,39 +96,17 @@
   </div>
 
   <div class="card">
-    <div class="kpis" title="KPIs da área visível no mapa">
-      <div class="kpi">
-        <div class="label">Crédito visível (R$)</div>
-        <div class="value" id="kpi-credito">—</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Desmatamento visível (ha)</div>
-        <div class="value" id="kpi-desmate">—</div>
-      </div>
-      <div class="kpi">
-        <div class="label">CARs visíveis</div>
-        <div class="value" id="kpi-cars">—</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Com embargo (visível)</div>
-        <div class="value" id="kpi-embargos">—</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
     <div class="toolbar">
       <input id="search" placeholder="Buscar por cód. imóvel (cod_imovel)" />
       <input id="search-embargo" placeholder="Buscar autuado por embargo (emb_nome)" list="embargo-suggestions" />
       <datalist id="embargo-suggestions"></datalist>
-      <button id="zoom-br">Amazônia/BR</button>
-      <label><input type="checkbox" id="toggle-ti" checked> Terras Indígenas</label>
-      <label><input type="checkbox" id="toggle-uc" checked> Unidades de Conservação</label>
     </div>
   </div>
 
   <div class="card">
     <div class="filters">
+      <label class="flt"><span class="swatch swatch-ti"></span><input type="checkbox" id="toggle-ti" checked> Terras Indígenas</label>
+      <label class="flt"><span class="swatch swatch-uc"></span><input type="checkbox" id="toggle-uc" checked> Unidades de Conservação</label>
       <label class="flt"><input type="checkbox" id="only-embargo"> Só com embargo</label>
       <label class="flt"><input type="checkbox" id="only-ti"> Só em TI</label>
       <label class="flt"><input type="checkbox" id="only-uc"> Só em UC</label>
@@ -162,6 +153,26 @@ const FIELDS = {
   focos_anos: 'focos_anos',
   valor_parcela_credito: 'valor_parcela_credito',
   cnpj_basico: 'cnpj_basico_instituicao_financeira'
+};
+
+// Algumas bases trazem variações no nome do campo de CNPJ (com espaço, tab ou nome curto).
+const CNPJ_ALIASES = [
+  'cnpj_basico_instituicao_financeira',
+  'cnpj_basico_instituicao_financeira ',
+  'cnpj_instituicao',
+  'cnpj'
+];
+const getProp = (obj, keys) => {
+  if (!obj) return undefined;
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+  }
+  return undefined;
+};
+const getCnpjBasico = (props) => String(getProp(props, CNPJ_ALIASES) || '').trim();
+const splitCnpjs = (raw) => {
+  if (!raw) return [];
+  return String(raw).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
 };
 
 const POPUP_FIELDS = [
@@ -215,8 +226,11 @@ function setLayersVisibility(layerIds, visible) {
 }
 
 const filtersState = { onlyEmbargo: false, onlyTI: false, onlyUC: false };
+const cnpjFilterState = { value: '', valueLower: '' };
 let SOURCE_LAYER = null;
+let allRecords = [];
 let lastResults = [];
+let lastTotals = null;
 
 function buildMapFilter() {
   const clauses = ['all'];
@@ -229,7 +243,24 @@ function buildMapFilter() {
   if (filtersState.onlyUC) {
     clauses.push(['==', ['downcase', ['get', FIELDS.UC]], 'sim']);
   }
+  if (cnpjFilterState.value) {
+    const target = cnpjFilterState.valueLower;
+    const splitExpr = (field, sep) => ['in', target, ['split', ['downcase', ['coalesce', ['get', field], '']], sep]];
+    clauses.push(['any',
+      ['==', ['downcase', ['get', FIELDS.cnpj_basico]], target],
+      splitExpr(FIELDS.cnpj_basico, ','),
+      splitExpr(FIELDS.cnpj_basico, ';')
+    ]);
+  }
   return clauses;
+}
+
+function recordPasses(rec) {
+  if (filtersState.onlyEmbargo && rec.embargoCount <= 0) return false;
+  if (filtersState.onlyTI && !rec.isTI) return false;
+  if (filtersState.onlyUC && !rec.isUC) return false;
+  if (cnpjFilterState.value && !rec.cnpjListLower.includes(cnpjFilterState.valueLower)) return false;
+  return true;
 }
 
 function applyFilters() {
@@ -239,20 +270,7 @@ function applyFilters() {
 }
 
 function collectVisibleFiltered() {
-  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
-  const seen = new Set();
-  const rows = [];
-  for (const f of feats) {
-    const id = f.properties?.[FIELDS.cod_imovel] || f.properties?.[FIELDS.id_car];
-    if (!id || seen.has(id)) continue; seen.add(id);
-    rows.push({
-      cod: id,
-      municipio: f.properties?.[FIELDS.municipio] || '—',
-      totalCR: Number(f.properties?.[FIELDS.total_CR]) || 0,
-      feature: f
-    });
-  }
-  return rows;
+  return allRecords.filter(recordPasses);
 }
 
 function renderResultsList() {
@@ -261,21 +279,18 @@ function renderResultsList() {
   lastResults = rows;
   tbody.innerHTML = '';
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="3">Nenhum resultado na área/filtro atual.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3">Nenhum resultado com os filtros atuais.</td></tr>';
     return;
   }
-  rows.sort((a,b) => b.totalCR - a.totalCR);
-  for (const row of rows) {
+  rows.slice().sort((a,b) => b.totalCR - a.totalCR).forEach(row => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.cod}</td><td>${row.municipio}</td><td>${row.totalCR.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>`;
     tr.addEventListener('click', () => {
-      try {
-        const b = turf.bbox(row.feature);
-        map.fitBounds(b, { padding: 40, duration: 600 });
-      } catch (e) { console.warn('BBox error', e); }
+      try { map.fitBounds(row.bbox, { padding: 40, duration: 600 }); }
+      catch (e) { console.warn('BBox error', e); }
     });
     tbody.appendChild(tr);
-  }
+  });
 }
 
 function downloadCSV() {
@@ -295,112 +310,11 @@ function downloadCSV() {
 let kpiTimer = null;
 function scheduleUpdates() {
   if (kpiTimer) cancelAnimationFrame(kpiTimer);
-  kpiTimer = requestAnimationFrame(() => { updateKPIs(); renderResultsList(); });
-}
-function updateKPIs() {
-  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
-  const seen = new Set();
-  let totalCredito = 0, totalDesmate = 0, cars = 0, comEmbargo = 0;
-  for (const f of feats) {
-    const id = f.properties?.[FIELDS.cod_imovel] || f.properties?.[FIELDS.id_car] || f.id || JSON.stringify(f.properties);
-    if (seen.has(id)) continue; seen.add(id);
-    const cr = Number(f.properties?.[FIELDS.total_CR] ?? 0);
-    const dm = Number(f.properties?.[FIELDS.desmate] ?? 0);
-    const emb = Number(f.properties?.[FIELDS.embargo_count] ?? 0);
-    totalCredito += isFinite(cr) ? cr : 0;
-    totalDesmate += isFinite(dm) ? dm : 0;
-    cars += 1; if (emb > 0) comEmbargo += 1;
-  }
-  document.getElementById('kpi-credito').textContent = isFinite(totalCredito) ? totalCredito.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';
-  document.getElementById('kpi-desmate').textContent = isFinite(totalDesmate) ? totalDesmate.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—';
-  document.getElementById('kpi-cars').textContent = cars || '0';
-  document.getElementById('kpi-embargos').textContent = comEmbargo || '0';
-}
-
-async function loadGlobalTotals() {
-  const totals = { totalCAR: 0, somaCredito: 0, somaDesmate: 0, focosTotal: 0, qtdTI: 0, qtdUC: 0, porInst: [] };
-
-  try {
-    const statsUrl = `https://api.mapbox.com/tilesets/v1/${TILESET}/statistics?access_token=${mapboxgl.accessToken}`;
-    const r = await fetch(statsUrl);
-    if (r.ok) {
-      const js = await r.json();
-      const layer = (js.layers && js.layers[0]) || js;
-      totals.totalCAR = layer && (layer.featureCount || layer.count || layer.layerCount) || 0;
-
-      const crField = (layer.fields && layer.fields[FIELDS.total_CR]) || {};
-      totals.somaCredito = (crField && (crField.sum || (crField.summary && crField.summary.sum))) || 0;
-
-      const desField = (layer.fields && layer.fields[FIELDS.desmate]) || {};
-      totals.somaDesmate = (desField && (desField.sum || (desField.summary && desField.summary.sum))) || 0;
-
-      const focField = (layer.fields && layer.fields[FIELDS.focos_count]) || {};
-      totals.focosTotal = (focField && (focField.sum || (focField.summary && focField.summary.sum))) || 0;
-
-      const tiField = (layer.fields && layer.fields[FIELDS.TI]) || {};
-      const ucField = (layer.fields && layer.fields[FIELDS.UC]) || {};
-      const catCount = (fld, key='sim') => {
-        if (!fld || !fld.categories) return 0;
-        const item = fld.categories.find(c => String(c.value).toLowerCase() === key);
-        return item ? (item.count || item.frequency || 0) : 0;
-      };
-      totals.qtdTI = catCount(tiField, 'sim');
-      totals.qtdUC = catCount(ucField, 'sim');
-
-      const instField = (layer.fields && layer.fields[FIELDS.cnpj_basico]) || {};
-      let pairs = [];
-      if (instField.categories) {
-        pairs = instField.categories.map(c => ({ inst: c.value || '—', count: c.count || c.frequency || 0 }));
-      }
-      pairs.sort((a,b) => b.count - a.count);
-      totals.porInst = pairs.slice(0, 20);
-
-      if (totals.totalCAR || totals.somaCredito || totals.porInst.length) {
-        paintGlobalTotals(totals);
-        return;
-      }
-    }
-  } catch (e) {
-    console.warn('Falha nas estatísticas do tileset, usando fallback de varredura:', e);
-  }
-
-  const prev = { center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
-  const AMAZ_BOUNDS = [[-74, -17], [-44, 6]];
-  await new Promise(res => {
-    map.fitBounds(AMAZ_BOUNDS, { padding: 40, duration: 0, maxZoom: 4.36 });
-    map.once('idle', res);
-  });
-
-  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
-  const seen = new Set();
-  const instCount = new Map();
-  let somaCredito = 0, somaDesmate = 0, focosTotal = 0, qtdTI = 0, qtdUC = 0, totalCAR = 0;
-
-  for (const f of feats) {
-    const id = f.properties?.[FIELDS.cod_imovel] || f.properties?.[FIELDS.id_car];
-    if (!id || seen.has(id)) continue; seen.add(id);
-    totalCAR += 1;
-    const cr = Number(f.properties?.[FIELDS.total_CR] ?? 0);
-    if (isFinite(cr)) somaCredito += cr;
-    const dm = Number(f.properties?.[FIELDS.desmate] ?? 0);
-    if (isFinite(dm)) somaDesmate += dm;
-    const foc = Number(f.properties?.[FIELDS.focos_count] ?? 0);
-    if (isFinite(foc)) focosTotal += foc;
-    const ti = String(f.properties?.[FIELDS.TI] ?? '').toLowerCase() === 'sim';
-    const uc = String(f.properties?.[FIELDS.UC] ?? '').toLowerCase() === 'sim';
-    if (ti) qtdTI += 1; if (uc) qtdUC += 1;
-    const inst = (f.properties?.[FIELDS.cnpj_basico] || '—').trim();
-    instCount.set(inst, (instCount.get(inst) || 0) + 1);
-  }
-
-  const porInst = [...instCount.entries()].map(([inst, count]) => ({ inst, count })).sort((a,b) => b.count - a.count).slice(0, 20);
-
-  paintGlobalTotals({ totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst });
-
-  map.jumpTo(prev);
+  kpiTimer = requestAnimationFrame(() => { renderResultsList(); updateTotalsFiltered(); });
 }
 
 function paintGlobalTotals({ totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst }) {
+  lastTotals = { totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst };
   const el = (id) => document.getElementById(id);
   el('tot-car').textContent = (totalCAR ?? 0).toLocaleString('pt-BR');
   el('tot-credito').textContent = (somaCredito ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
@@ -411,11 +325,15 @@ function paintGlobalTotals({ totalCAR, somaCredito, somaDesmate, focosTotal, qtd
 
   const tbody = document.getElementById('tot-inst-list');
   tbody.innerHTML = '';
-  if (!porInst || !porInst.length) {
+  let rowsInst = porInst || [];
+  if (cnpjFilterState.value) {
+    rowsInst = rowsInst.filter(r => String(r.inst || '').toLowerCase() === cnpjFilterState.valueLower);
+  }
+  if (!rowsInst.length) {
     tbody.innerHTML = '<tr><td colspan="2">Sem dados de instituição.</td></tr>';
     return;
   }
-  for (const row of porInst) {
+  for (const row of rowsInst) {
     const tr = document.createElement('tr');
     const td1 = document.createElement('td'); td1.textContent = row.inst || '—';
     const td2 = document.createElement('td'); td2.textContent = (row.count || 0).toLocaleString('pt-BR');
@@ -427,11 +345,10 @@ function updateEmbargoSuggestions(term) {
   const dl = document.getElementById('embargo-suggestions');
   dl.innerHTML = '';
   if (term.length < 3) return;
-  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
   const seen = new Set();
   const list = [];
-  for (const f of feats) {
-    const name = (f.properties?.[FIELDS.emb_nome] || '').trim();
+  for (const rec of allRecords) {
+    const name = (rec.embNome || '').trim();
     if (!name) continue;
     const low = name.toLowerCase();
     if (!low.includes(term.toLowerCase())) continue;
@@ -444,6 +361,87 @@ function updateEmbargoSuggestions(term) {
     opt.value = v;
     dl.appendChild(opt);
   });
+}
+
+function renderCnpjOptions() {
+  const selects = [document.getElementById('inst-filter')].filter(Boolean);
+  const seen = new Set();
+  const list = [];
+  for (const rec of allRecords) {
+    (rec.cnpjList || []).forEach(v => {
+      if (!v) return;
+      if (seen.has(v)) return;
+      seen.add(v); list.push(v);
+    });
+  }
+  list.sort();
+  const options = list.map(v => `<option value="${v}">${v}</option>`).join('');
+  selects.forEach(sel => {
+    sel.innerHTML = `<option value="">Todas</option>` + options;
+  });
+  if (cnpjFilterState.value) document.getElementById('inst-filter').value = cnpjFilterState.value;
+}
+
+function computeTotalsFromRecords(records) {
+  const instCount = new Map();
+  let somaCredito = 0, somaDesmate = 0, focosTotal = 0, qtdTI = 0, qtdUC = 0, totalCAR = 0;
+  for (const r of records) {
+    totalCAR += 1;
+    if (isFinite(r.totalCR)) somaCredito += r.totalCR;
+    if (isFinite(r.desmate)) somaDesmate += r.desmate;
+    if (isFinite(r.focos)) focosTotal += r.focos;
+    if (r.isTI) qtdTI += 1;
+    if (r.isUC) qtdUC += 1;
+    const vals = r.cnpjList.length ? r.cnpjList : ['—'];
+    for (const inst of vals) {
+      instCount.set(inst, (instCount.get(inst) || 0) + 1);
+    }
+  }
+  const porInst = [...instCount.entries()].map(([inst, count]) => ({ inst, count })).sort((a,b) => b.count - a.count).slice(0, 20);
+  return { totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst };
+}
+
+function updateTotalsFiltered() {
+  const totals = computeTotalsFromRecords(collectVisibleFiltered());
+  paintGlobalTotals(totals);
+}
+
+async function buildAllRecords() {
+  const prev = { center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+  const AMAZ_BOUNDS = [[-74, -17], [-44, 6]];
+  await new Promise(res => { map.fitBounds(AMAZ_BOUNDS, { padding: 40, duration: 0, maxZoom: 4.36 }); map.once('idle', res); });
+
+  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
+  const seen = new Set();
+  const arr = [];
+  for (const f of feats) {
+    const p = f.properties || {};
+    const id = p[FIELDS.cod_imovel] || p[FIELDS.id_car];
+    if (!id || seen.has(id)) continue; seen.add(id);
+    const bbox = turf.bbox(f);
+    const cnpjRaw = getCnpjBasico(p);
+    const cnpjList = splitCnpjs(cnpjRaw);
+    arr.push({
+      cod: id,
+      municipio: p[FIELDS.municipio] || '—',
+      totalCR: Number(p[FIELDS.total_CR]) || 0,
+      embargoCount: Number(p[FIELDS.embargo_count]) || 0,
+      isTI: String(p[FIELDS.TI] ?? '').toLowerCase() === 'sim',
+      isUC: String(p[FIELDS.UC] ?? '').toLowerCase() === 'sim',
+      embNome: p[FIELDS.emb_nome] || '',
+      cnpjList,
+      cnpjListLower: cnpjList.map(v => v.toLowerCase()),
+      desmate: Number(p[FIELDS.desmate]) || 0,
+      focos: Number(p[FIELDS.focos_count]) || 0,
+      props: p,
+      bbox
+    });
+  }
+  allRecords = arr;
+  map.jumpTo(prev);
+  renderResultsList();
+  renderCnpjOptions();
+  updateTotalsFiltered();
 }
 
 map.on('load', async () => {
@@ -484,8 +482,13 @@ map.on('load', async () => {
     map.on('click', 'credito-fill', (e) => {
       const p = e.features[0].properties || {}; let rows = '';
       for (const [label, key] of POPUP_FIELDS) {
-        if (p[key] === undefined) continue;
-        const val = /ha|cr$|cr\)|cr\s|\(r\$\)/i.test(label) ? fmtNum(p[key]) : safe(p[key]);
+        let v = p[key];
+        // fallback para CNPJ básico em caso de alias ou múltiplos valores
+        if (key === FIELDS.cnpj_basico && (v === undefined || v === null || v === '')) {
+          v = getCnpjBasico(p);
+        }
+        if (v === undefined) continue;
+        const val = /ha|cr$|cr\)|cr\s|\(r\$\)/i.test(label) ? fmtNum(v) : safe(v);
         rows += `<tr><th>${label}</th><td>${val}</td></tr>`;
       }
       new mapboxgl.Popup({ maxWidth: '480px' }).setLngLat(e.lngLat).setHTML(`<table>${rows || '<tr><td>Sem atributos.</td></tr>'}</table>`).addTo(map);
@@ -503,10 +506,9 @@ map.on('load', async () => {
     document.getElementById('search').addEventListener('keydown', (ev) => {
       if (ev.key !== 'Enter') return;
       const term = ev.target.value.trim().toUpperCase(); if (!term) return;
-      const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] });
-      const match = feats.find(ft => (ft.properties?.[FIELDS.cod_imovel] || '').toUpperCase() === term);
-      if (match) { const b = turf.bbox(match); map.fitBounds(b, { padding: 40, duration: 600 }); }
-      else { alert('cod_imovel não encontrado na área visível/zoom atual. Aproxime/arraste o mapa e tente novamente.'); }
+      const match = allRecords.find(r => (r.cod || '').toUpperCase() === term);
+      if (match) { map.fitBounds(match.bbox, { padding: 40, duration: 600 }); }
+      else { alert('cod_imovel não encontrado no dataset.'); }
     });
 
     const embargoInput = document.getElementById('search-embargo');
@@ -514,10 +516,9 @@ map.on('load', async () => {
     embargoInput.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Enter') return;
       const term = ev.target.value.trim().toLowerCase(); if (!term) return;
-      const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] });
-      const match = feats.find(ft => (ft.properties?.[FIELDS.emb_nome] || '').toLowerCase().includes(term));
-      if (match) { const b = turf.bbox(match); map.fitBounds(b, { padding: 40, duration: 600 }); }
-      else { alert('Nome de autuado não encontrado na área visível/zoom atual.'); }
+      const match = allRecords.find(r => (r.embNome || '').toLowerCase().includes(term));
+      if (match) { map.fitBounds(match.bbox, { padding: 40, duration: 600 }); }
+      else { alert('Nome de autuado não encontrado no dataset.'); }
     });
 
     document.getElementById('zoom-br').addEventListener('click', () => {
@@ -528,22 +529,31 @@ map.on('load', async () => {
       filtersState.onlyEmbargo = document.getElementById('only-embargo').checked;
       filtersState.onlyTI = document.getElementById('only-ti').checked;
       filtersState.onlyUC = document.getElementById('only-uc').checked;
+      cnpjFilterState.value = document.getElementById('inst-filter').value;
+      cnpjFilterState.valueLower = cnpjFilterState.value.trim().toLowerCase();
       applyFilters();
     });
 
     document.getElementById('reset-filters').addEventListener('click', () => {
       ['only-embargo','only-ti','only-uc'].forEach(id => { const el = document.getElementById(id); el.checked = false; });
+      document.getElementById('inst-filter').value = '';
       filtersState.onlyEmbargo = false; filtersState.onlyTI = false; filtersState.onlyUC = false;
+      cnpjFilterState.value = ''; cnpjFilterState.valueLower = '';
       applyFilters();
     });
 
     document.getElementById('download-csv').addEventListener('click', downloadCSV);
+    document.getElementById('inst-filter').addEventListener('change', (e) => {
+      cnpjFilterState.value = e.target.value;
+      cnpjFilterState.valueLower = cnpjFilterState.value.trim().toLowerCase();
+      applyFilters();
+    });
 
     map.on('moveend', scheduleUpdates);
     map.on('zoomend', scheduleUpdates);
-    scheduleUpdates();
 
-    await loadGlobalTotals();
+    await buildAllRecords();
+    scheduleUpdates();
 
   } catch (err) {
     console.error(err);
