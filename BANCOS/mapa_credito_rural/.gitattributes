@@ -1,0 +1,1 @@
+data/painel_por_uf/*.json filter=lfs diff=lfs merge=lfs -text
