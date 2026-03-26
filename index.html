@@ -2,13 +2,18 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <title>Crédito Rural — Mapa (MTS) • Sidebar Fixo</title>
+  <title>Crédito Rural — Mapa (MTS) • Painel + IF + UF (Supabase)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet" />
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <!-- ✅ Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
-    :root { --sidebar-w: 320px; }
+    :root { --sidebar-w: 340px; }
     html, body { height:100%; margin:0; }
     #map { position:absolute; inset:0; }
 
@@ -22,24 +27,27 @@
       border:1px solid #ddd; border-radius:12px; padding:10px 12px;
       font:12px system-ui; box-shadow:0 1px 2px rgba(0,0,0,.08);
     }
+    .header-title { font:700 15px/1.3 system-ui; margin:0; color:#1f5a32; }
+
+    .top-action { display:flex; justify-content:flex-start; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn-zoom { border:1px solid #6aa57a; background:#d6f0dc; color:#1f5a32; border-radius:8px; padding:6px 10px; cursor:pointer; }
+    .btn-zoom.secondary { border-color:#ccc; background:#fff; color:#333; }
+
     .totais h3 { margin:0 0 6px; font:600 13px/1.2 system-ui; color:#333; }
     .totais .row { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-top:1px dashed #e6e6e6; }
     .totais .row:first-child { border-top:0; }
     .totais .row .label { color:#555; }
-    .totais .inst-list { margin-top:8px; max-height:220px; overflow:auto; border:1px solid #eee; border-radius:8px; background:#fff; }
-    .totais .inst-list table { width:100%; border-collapse:collapse; font-size:12px; }
-  .totais .inst-list th, .totais .inst-list td { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
-  .totais .inst-list th { position:sticky; top:0; background:#fafafa; z-index:1; }
-    .inst-filter { margin:8px 0; display:flex; flex-direction:column; gap:4px; font-size:12px; }
+
+    .inst-filter { margin:10px 0 8px; display:flex; flex-direction:column; gap:4px; font-size:12px; }
     .inst-filter select { padding:6px 8px; border:1px solid #ccc; border-radius:6px; }
 
-    .top-action { display:flex; justify-content:flex-start; }
-    .btn-zoom { border:1px solid #6aa57a; background:#d6f0dc; color:#1f5a32; border-radius:8px; padding:6px 10px; cursor:pointer; }
+    .inst-list { margin-top:8px; max-height:220px; overflow:auto; border:1px solid #eee; border-radius:8px; background:#fff; }
+    .inst-list table { width:100%; border-collapse:collapse; font-size:12px; }
+    .inst-list th, .inst-list td { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
+    .inst-list th { position:sticky; top:0; background:#fafafa; z-index:1; }
 
     .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-    .toolbar input[type="text"] { width: 240px; padding:6px 8px; border:1px solid #ccc; border-radius:6px; }
-    .toolbar button { border:1px solid #ccc; background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; }
-    .toolbar label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+    .toolbar input[type="text"] { width: 100%; padding:6px 8px; border:1px solid #ccc; border-radius:6px; }
 
     .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
     .flt { display:flex; align-items:center; gap:6px; }
@@ -48,555 +56,743 @@
     .swatch-ti { background:rgba(128, 0, 128, 0.6); }
     .swatch-uc { background:rgba(0, 100, 0, 0.6); }
 
-    .result-list { margin-top:8px; max-height:240px; overflow:auto; border:1px solid #eee; border-radius:8px; background:#fff; }
-    .result-list table { width:100%; border-collapse:collapse; font-size:12px; }
-    .result-list th, .result-list td { padding:6px 8px; border-bottom:1px solid #f0f0f0; text-align:left; }
-    .result-list tr:hover { background:#f5f5f5; cursor:pointer; }
-    .result-actions { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-    .result-actions button { border:1px solid #ccc; background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; }
+    .hint {
+      font-size:11px; color:#666; margin-top:6px; line-height:1.3;
+      border-left:3px solid #ddd; padding-left:8px;
+    }
 
-    .mapboxgl-popup { max-width: 480px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .badge { margin-top:auto; font-size:11px; color:#666; text-align:left; }
+    .badge strong { color:#333; }
+    #activeFilter { color:#1f5a32; font-weight:600; }
+
+    .mapboxgl-popup { max-width: 520px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
     .mapboxgl-popup table { border-collapse: collapse; width: 100%; }
     .mapboxgl-popup th, .mapboxgl-popup td { padding: 4px 6px; vertical-align: top; }
-    .mapboxgl-popup th { width: 40%; text-align: right; color: #555; font-weight: 600; }
+    .mapboxgl-popup th { width: 42%; text-align: right; color: #555; font-weight: 600; }
 
-  .badge { margin-top:auto; font-size:11px; color:#666; text-align:left; }
-    .header-title { font:700 15px/1.3 system-ui; margin:0; color:#1f5a32; }
     .modal-backdrop {
       position:fixed; inset:0; background:rgba(0,0,0,0.4); display:none;
       align-items:center; justify-content:center; z-index:9999;
     }
     .modal-card {
-      background:#fff; border-radius:12px; padding:16px 18px; max-width:460px; box-shadow:0 10px 30px rgba(0,0,0,0.2);
+      background:#fff; border-radius:12px; padding:16px 18px; max-width:520px; box-shadow:0 10px 30px rgba(0,0,0,0.2);
       font:14px/1.5 system-ui;
     }
     .modal-card h3 { margin:0 0 8px; font:700 16px/1.3 system-ui; }
     .modal-card button { margin-top:12px; border:1px solid #ccc; background:#f5f5f5; border-radius:6px; padding:6px 10px; cursor:pointer; }
   </style>
 </head>
+
 <body>
+  <div id="map"></div>
 
-<div id="map"></div>
-
-<div id="info-modal" class="modal-backdrop">
-  <div class="modal-card">
-    <h3>Mapa do Crédito Rural na Amazônia</h3>
-    <p>Este mapa interativo mostra imóveis rurais com crédito rural, permitindo filtrar por instituições (CNPJ básico), embargos, TI/UC e consultar detalhes de cada CAR. Use o botão “Amazônia/BR” para recentrar e clique nos polígonos para ver os atributos.</p>
-    <button id="close-modal">Fechar</button>
-  </div>
-</div>
-
-<div class="sidebar">
-  <div class="card">
-    <h1 class="header-title">Mapa do Crédito Rural na Amazônia</h1>
-  </div>
-  <div class="card top-action">
-    <button id="zoom-br" class="btn-zoom">Amazônia/BR</button>
+  <div id="info-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <h3>Mapa do Crédito Rural na Amazônia</h3>
+      <p>
+        Agora o painel (totais, top IFs e filtro de IF) vem do Supabase (Postgres).
+        O mapa continua usando o tileset do Mapbox.
+      </p>
+      <button id="close-modal">Fechar</button>
+    </div>
   </div>
 
-  <div class="card totais">
-    <h3>Totais (dataset)</h3>
-    <div class="row"><span class="label">Total de CAR</span><strong id="tot-car">—</strong></div>
-    <div class="row"><span class="label">Soma Total de Crédito (R$)</span><strong id="tot-credito">—</strong></div>
-    <div class="row"><span class="label">Desmatamento total (ha)</span><strong id="tot-desmate">—</strong></div>
-    <div class="row"><span class="label">Focos de incêndio (qtd)</span><strong id="tot-focos">—</strong></div>
-    <div class="row"><span class="label">Quantidade em Terras Indígenas</span><strong id="tot-ti">—</strong></div>
-    <div class="row"><span class="label">Quantidade em Unidades de Conservação</span><strong id="tot-uc">—</strong></div>
+  <div class="sidebar">
+    <div class="card">
+      <h1 class="header-title">Mapa do Crédito Rural na Amazônia</h1>
+    </div>
 
-    <div class="inst-filter">
-      <label for="inst-filter">Filtrar por Instituição (CNPJ básico)</label>
-      <select id="inst-filter">
-        <option value="">Todas</option>
+    <div class="card top-action">
+      <button id="zoom-br" class="btn-zoom">Amazônia/BR</button>
+      <button id="open-modal" class="btn-zoom secondary">Sobre</button>
+      <button id="download-csv" class="btn-zoom secondary">Baixar CSV (renderizado)</button>
+
+      <select id="state-select" class="btn-zoom secondary" style="min-width:160px;">
+        <option value="">Estados da Amazônia</option>
+        <option value="AC">Acre</option>
+        <option value="AM">Amazonas</option>
+        <option value="AP">Amapá</option>
+        <option value="MA">Maranhão</option>
+        <option value="MT">Mato Grosso</option>
+        <option value="PA">Pará</option>
+        <option value="RO">Rondônia</option>
+        <option value="RR">Roraima</option>
+        <option value="TO">Tocantins</option>
       </select>
     </div>
-    <div class="inst-list" aria-label="Quantidade por instituição">
-      <table>
-        <thead><tr><th>Instituição (CNPJ básico)</th><th>Qtd. CAR</th></tr></thead>
-        <tbody id="tot-inst-list"><tr><td colspan="2">Carregando…</td></tr></tbody>
-      </table>
+
+    <div class="card totais">
+      <h3>Totais (Supabase)</h3>
+      <div class="row"><span class="label">Total de imóveis (cod_imovel)</span><strong id="tot-car">—</strong></div>
+      <div class="row"><span class="label">Soma de crédito (R$)</span><strong id="tot-credito">—</strong></div>
+      <div class="row"><span class="label">Soma desmatamento (ha)</span><strong id="tot-desmate">—</strong></div>
+      <div class="row"><span class="label">Focos de incêndio (qtd)</span><strong id="tot-focos">—</strong></div>
+      <div class="row"><span class="label">Quantidade em TI</span><strong id="tot-ti">—</strong></div>
+      <div class="row"><span class="label">Quantidade em UC</span><strong id="tot-uc">—</strong></div>
+
+      <div class="inst-filter">
+        <label for="inst-filter"><strong>Consultar por Instituição Financeira (IF)</strong></label>
+        <select id="inst-filter">
+          <option value="">Carregando…</option>
+        </select>
+        <div class="hint" id="if-hint">Carregando…</div>
+      </div>
+
+      <div class="inst-list" aria-label="Top IFs por ocorrências">
+        <table>
+          <thead><tr><th>IF (top 20)</th><th>Ocorr.</th></tr></thead>
+          <tbody id="tot-inst-list"><tr><td colspan="2">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <input id="search" placeholder="Buscar por cod_imovel e pressionar Enter" />
+      </div>
+      <div class="hint">
+        Dica: se não achar, aproxime/arraste e tente de novo (o tileset pode não estar carregado naquela área/zoom).
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filters">
+        <label class="flt"><span class="swatch swatch-ti"></span><input type="checkbox" id="toggle-ti" checked> Terras Indígenas</label>
+        <label class="flt"><span class="swatch swatch-uc"></span><input type="checkbox" id="toggle-uc" checked> Unidades de Conservação</label>
+      </div>
+      <hr style="border:0;border-top:1px solid #eee;margin:10px 0;">
+      <div class="filters">
+        <label class="flt"><input type="checkbox" id="only-embargo"> Só com embargo</label>
+        <label class="flt"><input type="checkbox" id="only-ti"> Só em TI</label>
+        <label class="flt"><input type="checkbox" id="only-uc"> Só em UC</label>
+        <button id="apply-filters" class="btn-zoom secondary">Aplicar</button>
+        <button id="reset-filters" class="btn-zoom secondary">Limpar</button>
+      </div>
+    </div>
+
+    <!-- ✅ badge com filtro ativo -->
+    <div class="badge">
+      <div><strong>Filtro ativo:</strong> <span id="activeFilter">—</span></div>
+      <div><span id="layerName">—</span></div>
     </div>
   </div>
-
-  <div class="card">
-    <div class="toolbar">
-      <input id="search" placeholder="Buscar por cód. imóvel (cod_imovel)" />
-      <input id="search-embargo" placeholder="Buscar autuado por embargo (emb_nome)" list="embargo-suggestions" />
-      <datalist id="embargo-suggestions"></datalist>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="filters">
-      <label class="flt"><span class="swatch swatch-ti"></span><input type="checkbox" id="toggle-ti" checked> Terras Indígenas</label>
-      <label class="flt"><span class="swatch swatch-uc"></span><input type="checkbox" id="toggle-uc" checked> Unidades de Conservação</label>
-      <label class="flt"><input type="checkbox" id="only-embargo"> Só com embargo</label>
-      <label class="flt"><input type="checkbox" id="only-ti"> Só em TI</label>
-      <label class="flt"><input type="checkbox" id="only-uc"> Só em UC</label>
-      <button id="apply-filters">Aplicar filtros</button>
-      <button id="reset-filters">Limpar</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="result-actions">
-      <strong>Resultados filtrados</strong>
-      <button id="download-csv">Baixar CSV</button>
-    </div>
-    <div class="result-list" aria-label="Resultados filtrados">
-      <table>
-        <thead><tr><th>Cod. Imóvel</th><th>Município</th><th>Total CR (R$)</th></tr></thead>
-        <tbody id="result-rows"><tr><td colspan="3">Carregando…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="badge"><span id="layerName">—</span></div>
-</div>
 
 <script>
-mapboxgl.accessToken = 'pk.eyJ1IjoiaW5mb2FtYXpvbmlhIiwiYSI6ImNtNzRxN2lmODBjOTYya29tbDhsYnJwMDEifQ.xfHyTw_HCoxQzI0TNVYCHg';
+  // =========================
+  // CONFIG
+  // =========================
+  mapboxgl.accessToken = 'pk.eyJ1IjoiaW5mb2FtYXpvbmlhIiwiYSI6ImNtNzRxN2lmODBjOTYya29tbDhsYnJwMDEifQ.xfHyTw_HCoxQzI0TNVYCHg';
 
-const TILESET   = 'infoamazonia.credito';
-const STYLE_URL = 'mapbox://styles/infoamazonia/cmhavswvo002u01s19eakho0b';
+  const TILESET   = 'infoamazonia.credito_v2';
+  const STYLE_URL = 'mapbox://styles/infoamazonia/cmjovxijh000c01qqh5nk8oj1';
 
-const FIELDS = {
-  id_car: 'id_car',
-  cod_imovel: 'cod_imovel',
-  municipio: 'municipio',
-  total_CR: 'total_CR',
-  embargo_count: 'embargo_count',
-  embargo_area_ha: 'embargo_area_ha',
-  emb_nome: 'emb_nome',
-  desmate: 'Desmatamento_ha',
-  UC: 'UC',
-  TI: 'TI',
-  area_afetada: 'area_afetada',
-  focos_count: 'focos_count',
-  focos_anos: 'focos_anos',
-  valor_parcela_credito: 'valor_parcela_credito',
-  cnpj_basico: 'cnpj_basico_instituicao_financeira'
-};
+  // ✅ Supabase
+  const SUPABASE_URL = 'https://dmuiabjubleyqjludugv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtdWlhYmp1YmxleXFqbHVkdWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzU1NzQsImV4cCI6MjA4MjUxMTU3NH0.1qhGXFPwNG0dzfN2fJvSl7_9Z6p7R8-N4x3Kq7ebj7I';
 
-// Algumas bases trazem variações no nome do campo de CNPJ (com espaço, tab ou nome curto).
-const CNPJ_ALIASES = [
-  'cnpj_basico_instituicao_financeira',
-  'cnpj_basico_instituicao_financeira ',
-  'cnpj_instituicao',
-  'cnpj'
-];
-const getProp = (obj, keys) => {
-  if (!obj) return undefined;
-  for (const k of keys) {
-    if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+  const AMAZ_BOUNDS = [[-74, -17], [-44, 6]];
+  const UF_BOUNDS = {
+    AC: [[-74.1, -12.2], [-66.5, -6.3]],
+    AM: [[-74.4, -9.8], [-56.1, 3.9]],
+    AP: [[-55.3, -2.6], [-49.9, 3.9]],
+    PA: [[-57.7, -9.1], [-44.0, 2.3]],
+    RO: [[-65.2, -14.0], [-59.7, -7.9]],
+    RR: [[-64.9, 0.8], [-59.5, 5.3]],
+    TO: [[-51.9, -13.7], [-45.5, -5.0]],
+    MA: [[-48.0, -10.9], [-42.0, -1.0]],
+    MT: [[-61.5, -18.0], [-50.1, -7.1]]
+  };
+
+  const FIELDS = {
+    cod_imovel: 'cod_imovel',
+    municipio: 'municipio',
+    total_CR: 'vl_parc_credito_sum',
+    desmate: 'desmatamento_ha',
+    UC: 'interf_UC',
+    TI: 'interf_TI',
+    Embargo: 'Embargo',
+    cod_estado: 'cod_estado',
+    nome_if: 'nome_if',
+    ano_arquivo: 'ano_arquivo',
+    produto: 'produto'
+  };
+
+  const POPUP_FIELDS = [
+    ['Cod. Imóvel', FIELDS.cod_imovel],
+    ['Município', FIELDS.municipio],
+    ['UF (cod_estado)', FIELDS.cod_estado],
+    ['Instituição financeira (nome_if)', FIELDS.nome_if],
+    ['Total em Crédito Rural (R$)', FIELDS.total_CR],
+    ['Desmatamento (ha)', FIELDS.desmate],
+    ['Em TI', FIELDS.TI],
+    ['Em UC', FIELDS.UC],
+    ['Embargo', FIELDS.Embargo],
+    ['Ano arquivo', FIELDS.ano_arquivo],
+    ['Produto', FIELDS.produto],
+  ];
+
+  // =========================
+  // HELPERS
+  // =========================
+  const fmtNum = (v) => {
+    const n = Number(v);
+    return isFinite(n) ? n.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : (v ?? '').toString();
+  };
+  const safe = (x) => (x === null || x === undefined || x === '' ? '—' : String(x));
+  const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  const setHint = (msg) => { const el = document.getElementById('if-hint'); if (el) el.textContent = msg; };
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function prettySbError(err) {
+    if (!err) return 'Erro desconhecido.';
+    if (err.code === '57014') return 'Consulta demorou demais (timeout). Verifique MV/índices no banco.';
+    return (err.message || JSON.stringify(err));
   }
-  return undefined;
-};
-const getCnpjBasico = (props) => String(getProp(props, CNPJ_ALIASES) || '').trim();
-const splitCnpjs = (raw) => {
-  if (!raw) return [];
-  return String(raw).split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-};
 
-const POPUP_FIELDS = [
-  ['ID CAR', FIELDS.id_car],
-  ['Cod. Imóvel', FIELDS.cod_imovel],
-  ['Município', FIELDS.municipio],
-  ['Total em Crédito Rural (R$)', FIELDS.total_CR],
-  ['Embargos (qtd)', FIELDS.embargo_count],
-  ['Área Embargada (ha)', FIELDS.embargo_area_ha],
-  ['Autuado por embargo', FIELDS.emb_nome],
-  ['Desmatamento (ha)', FIELDS.desmate],
-  ['UC', FIELDS.UC],
-  ['TI', FIELDS.TI],
-  ['Área afetada', FIELDS.area_afetada],
-  ['Focos de incêndio (qtd)', FIELDS.focos_count],
-  ['Anos com queimadas', FIELDS.focos_anos],
-  ['Instituição (CNPJ básico)', FIELDS.cnpj_basico]
-];
-
-const fmtNum = (v) => {
-  const n = Number(v);
-  return isFinite(n) ? n.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : (v ?? '').toString();
-};
-const safe = (x) => (x === null || x === undefined || x === '' ? '—' : String(x));
-
-const map = new mapboxgl.Map({
-  container: 'map',
-  style: STYLE_URL,
-  center: [-60, -6],
-  zoom: 4.36,
-  projection: 'mercator'
-});
-
-async function fetchVectorLayerId(tilesetId) {
-  const url = `https://api.mapbox.com/v4/${tilesetId}.json?secure&access_token=${mapboxgl.accessToken}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Falha ao consultar metadata do tileset (${res.status})`);
-  const meta = await res.json();
-  const vls = (meta.vector_layers || []).map(v => v.id);
-  if (!vls.length) throw new Error('Nenhum vector_layer encontrado no tileset.');
-  return vls[0];
-}
-
-function getStyleLayerIdsByRegex(regex) {
-  const layers = map.getStyle().layers || [];
-  return layers.map(l => l.id).filter(id => regex.test(id));
-}
-function setLayersVisibility(layerIds, visible) {
-  layerIds.forEach(id => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none'); });
-}
-
-const filtersState = { onlyEmbargo: false, onlyTI: false, onlyUC: false };
-const cnpjFilterState = { value: '', valueLower: '' };
-let SOURCE_LAYER = null;
-let allRecords = [];
-let lastResults = [];
-let lastTotals = null;
-
-function buildMapFilter() {
-  const clauses = ['all'];
-  if (filtersState.onlyEmbargo) {
-    clauses.push(['>', ['to-number', ['get', FIELDS.embargo_count], 0], 0]);
+  function debounce(fn, ms = 250) {
+    let t = null;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
   }
-  if (filtersState.onlyTI) {
-    clauses.push(['==', ['downcase', ['get', FIELDS.TI]], 'sim']);
+
+  // ✅ Normalização (para filtrar IF no Mapbox sem depender de lista/limite)
+  function normStrExpr(fieldName) {
+    return ['downcase', ['string', ['trim', ['to-string', ['get', fieldName]]]]];
   }
-  if (filtersState.onlyUC) {
-    clauses.push(['==', ['downcase', ['get', FIELDS.UC]], 'sim']);
+  function normJS(s) {
+    return String(s ?? '').trim().toLowerCase();
   }
-  if (cnpjFilterState.value) {
-    const target = cnpjFilterState.valueLower;
-    const splitExpr = (field, sep) => ['in', target, ['split', ['downcase', ['coalesce', ['get', field], '']], sep]];
-    clauses.push(['any',
-      ['==', ['downcase', ['get', FIELDS.cnpj_basico]], target],
-      splitExpr(FIELDS.cnpj_basico, ','),
-      splitExpr(FIELDS.cnpj_basico, ';')
-    ]);
+
+  // ✅ label fixo do filtro ativo (UF/IF)
+  function updateActiveFilterLabel() {
+    const parts = [];
+    parts.push(selectedUF ? `UF: ${selectedUF}` : 'UF: Todas');
+    parts.push(selectedIF ? `IF: ${selectedIF}` : 'IF: Todas');
+    setText('activeFilter', parts.join(' • '));
   }
-  return clauses;
-}
 
-function recordPasses(rec) {
-  if (filtersState.onlyEmbargo && rec.embargoCount <= 0) return false;
-  if (filtersState.onlyTI && !rec.isTI) return false;
-  if (filtersState.onlyUC && !rec.isUC) return false;
-  if (cnpjFilterState.value && !rec.cnpjListLower.includes(cnpjFilterState.valueLower)) return false;
-  return true;
-}
-
-function applyFilters() {
-  const expr = buildMapFilter();
-  ['credito-fill', 'credito-line'].forEach(id => { if (map.getLayer(id)) map.setFilter(id, expr); });
-  scheduleUpdates();
-}
-
-function collectVisibleFiltered() {
-  return allRecords.filter(recordPasses);
-}
-
-function renderResultsList() {
-  const tbody = document.getElementById('result-rows');
-  const rows = collectVisibleFiltered();
-  lastResults = rows;
-  tbody.innerHTML = '';
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="3">Nenhum resultado com os filtros atuais.</td></tr>';
-    return;
-  }
-  rows.slice().sort((a,b) => b.totalCR - a.totalCR).forEach(row => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.cod}</td><td>${row.municipio}</td><td>${row.totalCR.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>`;
-    tr.addEventListener('click', () => {
-      try { map.fitBounds(row.bbox, { padding: 40, duration: 600 }); }
-      catch (e) { console.warn('BBox error', e); }
-    });
-    tbody.appendChild(tr);
-  });
-}
-
-function downloadCSV() {
-  if (!lastResults.length) { alert('Sem resultados para exportar.'); return; }
-  const lines = ['cod_imovel,municipio,total_CR'];
-  lastResults.forEach(r => {
-    const esc = (s) => `"${String(s ?? '').replace(/"/g,'""')}"`;
-    lines.push([esc(r.cod), esc(r.municipio), r.totalCR].join(','));
-  });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'resultado_filtro.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-let kpiTimer = null;
-function scheduleUpdates() {
-  if (kpiTimer) cancelAnimationFrame(kpiTimer);
-  kpiTimer = requestAnimationFrame(() => { renderResultsList(); updateTotalsFiltered(); });
-}
-
-function paintGlobalTotals({ totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst }) {
-  lastTotals = { totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst };
-  const el = (id) => document.getElementById(id);
-  el('tot-car').textContent = (totalCAR ?? 0).toLocaleString('pt-BR');
-  el('tot-credito').textContent = (somaCredito ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
-  el('tot-desmate').textContent = (somaDesmate ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
-  el('tot-focos').textContent = (focosTotal ?? 0).toLocaleString('pt-BR');
-  el('tot-ti').textContent = (qtdTI ?? 0).toLocaleString('pt-BR');
-  el('tot-uc').textContent = (qtdUC ?? 0).toLocaleString('pt-BR');
-
-  const tbody = document.getElementById('tot-inst-list');
-  tbody.innerHTML = '';
-  let rowsInst = porInst || [];
-  if (cnpjFilterState.value) {
-    rowsInst = rowsInst.filter(r => String(r.inst || '').toLowerCase() === cnpjFilterState.valueLower);
-  }
-  if (!rowsInst.length) {
-    tbody.innerHTML = '<tr><td colspan="2">Sem dados de instituição.</td></tr>';
-    return;
-  }
-  for (const row of rowsInst) {
-    const tr = document.createElement('tr');
-    const td1 = document.createElement('td'); td1.textContent = row.inst || '—';
-    const td2 = document.createElement('td'); td2.textContent = (row.count || 0).toLocaleString('pt-BR');
-    tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
-  }
-}
-
-function updateEmbargoSuggestions(term) {
-  const dl = document.getElementById('embargo-suggestions');
-  dl.innerHTML = '';
-  if (term.length < 3) return;
-  const seen = new Set();
-  const list = [];
-  for (const rec of allRecords) {
-    const name = (rec.embNome || '').trim();
-    if (!name) continue;
-    const low = name.toLowerCase();
-    if (!low.includes(term.toLowerCase())) continue;
-    if (seen.has(low)) continue;
-    seen.add(low); list.push(name);
-    if (list.length >= 10) break;
-  }
-  list.sort().forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    dl.appendChild(opt);
-  });
-}
-
-function renderCnpjOptions() {
-  const selects = [document.getElementById('inst-filter')].filter(Boolean);
-  const seen = new Set();
-  const list = [];
-  for (const rec of allRecords) {
-    (rec.cnpjList || []).forEach(v => {
-      if (!v) return;
-      if (seen.has(v)) return;
-      seen.add(v); list.push(v);
+  // =========================
+  // SUPABASE CLIENT
+  // =========================
+  let sb = null;
+  function initSupabase() {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      setHint('⚠️ Supabase não configurado.');
+      console.warn('SUPABASE_URL/ANON_KEY não configurados.');
+      return;
+    }
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false }
     });
   }
-  list.sort();
-  const options = list.map(v => `<option value="${v}">${v}</option>`).join('');
-  selects.forEach(sel => {
+
+  // =========================
+  // STATE
+  // =========================
+  let SOURCE_LAYER = null;
+  let selectedUF = '';
+  let selectedIF = '';
+  const filtersState = { onlyEmbargo: false, onlyTI: false, onlyUC: false };
+
+  let reqSeq = 0;
+
+  function painelRpcArgs() {
+    return {
+      uf: selectedUF || null,
+      only_embargo: filtersState.onlyEmbargo,
+      only_ti: filtersState.onlyTI,
+      only_uc: filtersState.onlyUC,
+      banco: selectedIF || null,
+      ano: null,
+      produto: null
+    };
+  }
+
+  // =========================
+  // MAP
+  // =========================
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: STYLE_URL,
+    center: [-60, -6],
+    zoom: 4.36,
+    projection: 'mercator'
+  });
+
+  function yesExpr(fieldName) {
+    return ['==', ['downcase', ['to-string', ['get', fieldName]]], 'sim'];
+  }
+  function ufExprUpper() {
+    return ['upcase', ['string', ['trim', ['to-string', ['get', FIELDS.cod_estado]]]]];
+  }
+
+  function buildBaseFilter() {
+    const clauses = ['all'];
+
+    if (selectedUF) clauses.push(['==', ufExprUpper(), selectedUF]);
+    if (filtersState.onlyEmbargo) clauses.push(yesExpr(FIELDS.Embargo));
+    if (filtersState.onlyTI) clauses.push(yesExpr(FIELDS.TI));
+    if (filtersState.onlyUC) clauses.push(yesExpr(FIELDS.UC));
+
+    if (selectedIF) {
+      clauses.push(['==', normStrExpr(FIELDS.nome_if), normJS(selectedIF)]);
+    }
+
+    return clauses;
+  }
+
+  function buildHighlightFilter(hoveredId) {
+    return ['all', buildBaseFilter(), ['==', ['to-string', ['get', FIELDS.cod_imovel]], String(hoveredId || '')]];
+  }
+
+  // ✅ cores com alto contraste para base satélite
+  const SAT_FILL_COLOR = '#00E5FF';   // ciano elétrico
+  const SAT_OUTLINE_HALO = '#FFFFFF'; // halo branco
+  const SAT_OUTLINE_MAIN = '#001A22'; // contorno escuro (para áreas claras)
+
+  function applyFiltersToMap() {
+    const base = buildBaseFilter();
+    if (map.getLayer('credito-fill')) map.setFilter('credito-fill', base);
+    if (map.getLayer('credito-line')) map.setFilter('credito-line', base);
+
+    // hover
+    if (map.getLayer('credito-highlight-halo')) map.setFilter('credito-highlight-halo', buildHighlightFilter(''));
+    if (map.getLayer('credito-highlight')) map.setFilter('credito-highlight', buildHighlightFilter(''));
+
+    // ✅ ajuste visual sempre (satélite)
+    if (map.getLayer('credito-fill')) {
+      map.setPaintProperty('credito-fill', 'fill-color', selectedIF ? '#FFD400' : SAT_FILL_COLOR);
+      map.setPaintProperty('credito-fill', 'fill-opacity',
+        ['interpolate', ['linear'], ['zoom'],
+          4, 0.22,
+          7, 0.40,
+          10, 0.62
+        ]
+      );
+      map.setPaintProperty('credito-fill', 'fill-outline-color', SAT_OUTLINE_HALO);
+    }
+
+    if (map.getLayer('credito-line')) {
+      map.setPaintProperty('credito-line', 'line-color', SAT_OUTLINE_HALO);
+      map.setPaintProperty('credito-line', 'line-width',
+        ['interpolate', ['linear'], ['zoom'],
+          4, 1.2,
+          7, 2.2,
+          10, 3.2
+        ]
+      );
+      map.setPaintProperty('credito-line', 'line-opacity', 0.95);
+    }
+
+    updateActiveFilterLabel();
+  }
+
+  async function fetchVectorLayerId(tilesetId) {
+    const url = `https://api.mapbox.com/v4/${tilesetId}.json?secure&access_token=${mapboxgl.accessToken}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Falha metadata tileset (HTTP ${res.status})`);
+    const meta = await res.json();
+    const vls = (meta.vector_layers || []).map(v => v.id);
+    if (!vls.length) throw new Error('Nenhum vector_layer encontrado no tileset.');
+    return vls[0];
+  }
+
+  function getStyleLayerIdsByRegex(regex) {
+    const layers = map.getStyle().layers || [];
+    return layers.map(l => l.id).filter(id => regex.test(id));
+  }
+  function setLayersVisibility(layerIds, visible) {
+    layerIds.forEach(id => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none'); });
+  }
+
+  // =========================
+  // UI helpers
+  // =========================
+  function fillIFSelect(menu) {
+    const sel = document.getElementById('inst-filter');
+    if (!sel) return;
+
+    const safeName = (s) => String(s ?? '').replace(/"/g, '&quot;');
+
+    const options = (menu || [])
+      .map(r => {
+        const nome = safeName(r.nome_if);
+        const occ = (r.ocorrencias || 0).toLocaleString('pt-BR');
+        return `<option value="${nome}">${nome} (${occ})</option>`;
+      })
+      .join('');
+
     sel.innerHTML = `<option value="">Todas</option>` + options;
-  });
-  if (cnpjFilterState.value) document.getElementById('inst-filter').value = cnpjFilterState.value;
-}
+  }
 
-function computeTotalsFromRecords(records) {
-  const instCount = new Map();
-  let somaCredito = 0, somaDesmate = 0, focosTotal = 0, qtdTI = 0, qtdUC = 0, totalCAR = 0;
-  for (const r of records) {
-    totalCAR += 1;
-    if (isFinite(r.totalCR)) somaCredito += r.totalCR;
-    if (isFinite(r.desmate)) somaDesmate += r.desmate;
-    if (isFinite(r.focos)) focosTotal += r.focos;
-    if (r.isTI) qtdTI += 1;
-    if (r.isUC) qtdUC += 1;
-    const vals = r.cnpjList.length ? r.cnpjList : ['—'];
-    for (const inst of vals) {
-      instCount.set(inst, (instCount.get(inst) || 0) + 1);
+  function paintTopIFTable(menu) {
+    const tbody = document.getElementById('tot-inst-list');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const top = (menu || []).slice(0, 20);
+    if (!top.length) {
+      tbody.innerHTML = '<tr><td colspan="2">Sem dados de IF.</td></tr>';
+      return;
+    }
+
+    for (const row of top) {
+      const tr = document.createElement('tr');
+
+      const td1 = document.createElement('td');
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = row.nome_if || '—';
+      a.style.color = '#1f5a32';
+      a.style.fontWeight = '600';
+      a.style.textDecoration = 'underline';
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+
+        const nome = (row.nome_if || '').trim();
+        if (!nome) return;
+
+        selectedIF = nome;
+        const ifSel = document.getElementById('inst-filter');
+        if (ifSel) ifSel.value = nome;
+
+        applyAll();
+      });
+      td1.appendChild(a);
+
+      const td2 = document.createElement('td');
+      td2.textContent = (row.ocorrencias || 0).toLocaleString('pt-BR');
+
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tbody.appendChild(tr);
     }
   }
-  const porInst = [...instCount.entries()].map(([inst, count]) => ({ inst, count })).sort((a,b) => b.count - a.count).slice(0, 20);
-  return { totalCAR, somaCredito, somaDesmate, focosTotal, qtdTI, qtdUC, porInst };
-}
 
-function updateTotalsFiltered() {
-  const totals = computeTotalsFromRecords(collectVisibleFiltered());
-  paintGlobalTotals(totals);
-}
-
-async function buildAllRecords() {
-  const prev = { center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
-  const AMAZ_BOUNDS = [[-74, -17], [-44, 6]];
-  await new Promise(res => { map.fitBounds(AMAZ_BOUNDS, { padding: 40, duration: 0, maxZoom: 4.36 }); map.once('idle', res); });
-
-  const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
-  const seen = new Set();
-  const arr = [];
-  for (const f of feats) {
-    const p = f.properties || {};
-    const id = p[FIELDS.cod_imovel] || p[FIELDS.id_car];
-    if (!id || seen.has(id)) continue; seen.add(id);
-    const bbox = turf.bbox(f);
-    const cnpjRaw = getCnpjBasico(p);
-    const cnpjList = splitCnpjs(cnpjRaw);
-    arr.push({
-      cod: id,
-      municipio: p[FIELDS.municipio] || '—',
-      totalCR: Number(p[FIELDS.total_CR]) || 0,
-      embargoCount: Number(p[FIELDS.embargo_count]) || 0,
-      isTI: String(p[FIELDS.TI] ?? '').toLowerCase() === 'sim',
-      isUC: String(p[FIELDS.UC] ?? '').toLowerCase() === 'sim',
-      embNome: p[FIELDS.emb_nome] || '',
-      cnpjList,
-      cnpjListLower: cnpjList.map(v => v.toLowerCase()),
-      desmate: Number(p[FIELDS.desmate]) || 0,
-      focos: Number(p[FIELDS.focos_count]) || 0,
-      props: p,
-      bbox
-    });
+  function setLoadingIFs() {
+    const sel = document.getElementById('inst-filter');
+    const tbody = document.getElementById('tot-inst-list');
+    if (sel) sel.innerHTML = `<option value="">Carregando…</option>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="2">Carregando…</td></tr>`;
   }
-  allRecords = arr;
-  map.jumpTo(prev);
-  renderResultsList();
-  renderCnpjOptions();
-  updateTotalsFiltered();
-}
 
-map.on('load', async () => {
-  try {
-    SOURCE_LAYER = await fetchVectorLayerId(TILESET);
-    document.getElementById('layerName').textContent = `Layer: ${SOURCE_LAYER}`;
+  // =========================
+  // SUPABASE RPC calls
+  // =========================
+  async function refreshTotals(localSeq) {
+    if (!sb) return;
+    const payload = painelRpcArgs();
+    const { data, error } = await sb.rpc('painel_totais', payload);
 
-    map.addSource('credito_tiles', { type: 'vector', url: `mapbox://${TILESET}` });
+    if (localSeq !== reqSeq) return;
+    if (error) {
+      console.error('painel_totais error:', error, payload);
+      setHint('Erro ao carregar totais: ' + prettySbError(error));
+      return;
+    }
 
-    map.addLayer({
-      id: 'credito-fill', type: 'fill', source: 'credito_tiles', 'source-layer': SOURCE_LAYER,
-      minzoom: 0, maxzoom: 24,
-      paint: { 'fill-color': '#888888', 'fill-opacity': 0.35, 'fill-outline-color': '#ffffff' },
-      filter: buildMapFilter()
-    });
+    const t = (data && data[0]) || {};
+    setText('tot-car', (t.total_imoveis ?? 0).toLocaleString('pt-BR'));
+    setText('tot-credito', (t.soma_credito ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 }));
+    setText('tot-desmate', (t.soma_desmatamento_ha ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 }));
+    setText('tot-ti', (t.qtd_com_interf_ti ?? 0).toLocaleString('pt-BR'));
+    setText('tot-uc', (t.qtd_com_interf_uc ?? 0).toLocaleString('pt-BR'));
+    setText('tot-focos', '—');
+  }
 
-    map.addLayer({
-      id: 'credito-line', type: 'line', source: 'credito_tiles', 'source-layer': SOURCE_LAYER,
-      minzoom: 0, maxzoom: 24, paint: { 'line-color': '#000', 'line-width': 0.4, 'line-opacity': 0.7 },
-      filter: buildMapFilter()
-    });
+  async function refreshTopIFs(localSeq) {
+    if (!sb) return;
 
-    map.addLayer({
-      id: 'credito-highlight', type: 'line', source: 'credito_tiles', 'source-layer': SOURCE_LAYER,
-      minzoom: 0, maxzoom: 24, paint: { 'line-color': '#000', 'line-width': 2 },
-      filter: ['==', ['get', FIELDS.cod_imovel], '']
-    });
+    setLoadingIFs();
 
-    let hoveredId = null;
-    map.on('mousemove', 'credito-fill', (e) => {
-      map.getCanvas().style.cursor = 'pointer';
-      const f = e.features?.[0]; if (!f) return;
-      const cid = f.properties?.[FIELDS.cod_imovel] || '';
-      if (cid !== hoveredId) { hoveredId = cid; map.setFilter('credito-highlight', ['==', ['get', FIELDS.cod_imovel], hoveredId]); }
-    });
-    map.on('mouseleave', 'credito-fill', () => { map.getCanvas().style.cursor = ''; hoveredId = null; map.setFilter('credito-highlight', ['==', ['get', FIELDS.cod_imovel], '']); });
+    const uf = selectedUF || null;
+    const only_embargo = filtersState.onlyEmbargo;
+    const only_ti = filtersState.onlyTI;
+    const only_uc = filtersState.onlyUC;
+    const ano = null;
+    const produto = null;
 
-    // Popup com todos os atributos (inclui CNPJ básico com fallback)
-    map.on('click', 'credito-fill', (e) => {
-      const p = e.features[0].properties || {}; let rows = '';
-      for (const [label, key] of POPUP_FIELDS) {
-        let v = p[key];
-        if (key === FIELDS.cnpj_basico && (v === undefined || v === null || v === '')) {
-          v = getCnpjBasico(p);
+    const { data, error } = await sb.rpc('top_ifs', { uf, only_embargo, only_ti, only_uc, ano, produto });
+
+    if (localSeq !== reqSeq) return;
+    if (error) {
+      console.error('top_ifs error:', error, { uf, only_embargo, only_ti, only_uc, ano, produto });
+      setHint('Erro ao carregar IFs: ' + prettySbError(error));
+      const tbody = document.getElementById('tot-inst-list');
+      if (tbody) tbody.innerHTML = `<tr><td colspan="2">Erro ao carregar IFs.</td></tr>`;
+      return;
+    }
+
+    fillIFSelect(data || []);
+    paintTopIFTable(data || []);
+
+    if (selectedIF) setHint(`IF selecionada: ${selectedIF} (mapa filtrado).`);
+    else setHint(selectedUF ? `UF selecionada: ${selectedUF}.` : `Selecione UF (opcional) e use os filtros.`);
+  }
+
+  // =========================
+  // Orquestração
+  // =========================
+  async function applyAllInternal() {
+    if (!sb) return;
+
+    reqSeq += 1;
+    const localSeq = reqSeq;
+
+    await Promise.all([
+      refreshTotals(localSeq),
+      refreshTopIFs(localSeq)
+    ]);
+
+    if (localSeq === reqSeq) applyFiltersToMap();
+  }
+
+  const applyAll = debounce(applyAllInternal, 250);
+
+  // =========================
+  // INIT
+  // =========================
+  map.on('load', async () => {
+    try {
+      initSupabase();
+      setHint('Carregando painel do Supabase…');
+
+      SOURCE_LAYER = await fetchVectorLayerId(TILESET);
+      setText('layerName', `Layer: ${SOURCE_LAYER}`);
+
+      updateActiveFilterLabel();
+
+      map.addSource('credito_tiles', { type: 'vector', url: `mapbox://${TILESET}` });
+
+      // ✅ fill alto contraste (satélite)
+      map.addLayer({
+        id: 'credito-fill',
+        type: 'fill',
+        source: 'credito_tiles',
+        'source-layer': SOURCE_LAYER,
+        paint: {
+          'fill-color': SAT_FILL_COLOR,
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.22, 7, 0.40, 10, 0.62],
+          'fill-outline-color': SAT_OUTLINE_HALO
+        },
+        filter: buildBaseFilter()
+      });
+
+      // ✅ contorno "halo" branco (aparece muito no satélite)
+      map.addLayer({
+        id: 'credito-line',
+        type: 'line',
+        source: 'credito_tiles',
+        'source-layer': SOURCE_LAYER,
+        paint: {
+          'line-color': SAT_OUTLINE_HALO,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.2, 7, 2.2, 10, 3.2],
+          'line-opacity': 0.95
+        },
+        filter: buildBaseFilter()
+      });
+
+      // ✅ hover halo (branco grosso)
+      map.addLayer({
+        id: 'credito-highlight-halo',
+        type: 'line',
+        source: 'credito_tiles',
+        'source-layer': SOURCE_LAYER,
+        paint: {
+          'line-color': '#FFFFFF',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3.0, 7, 4.5, 10, 6.0],
+          'line-opacity': 1
+        },
+        filter: buildHighlightFilter('')
+      });
+
+      // ✅ hover main (preto por cima do halo)
+      map.addLayer({
+        id: 'credito-highlight',
+        type: 'line',
+        source: 'credito_tiles',
+        'source-layer': SOURCE_LAYER,
+        paint: {
+          'line-color': '#000000',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.6, 7, 2.4, 10, 3.4],
+          'line-opacity': 1
+        },
+        filter: buildHighlightFilter('')
+      });
+
+      // Hover highlight
+      let hoveredId = '';
+      map.on('mousemove', 'credito-fill', (e) => {
+        map.getCanvas().style.cursor = 'pointer';
+        const f = e.features?.[0]; if (!f) return;
+        const cid = (f.properties?.[FIELDS.cod_imovel] ?? '').toString();
+        if (cid !== hoveredId) {
+          hoveredId = cid;
+          map.setFilter('credito-highlight-halo', buildHighlightFilter(hoveredId));
+          map.setFilter('credito-highlight', buildHighlightFilter(hoveredId));
         }
-        if (v === undefined) continue;
-        const val = /ha|cr$|cr\)|cr\s|\(r\$\)/i.test(label) ? fmtNum(v) : safe(v);
-        rows += `<tr><th>${label}</th><td>${val}</td></tr>`;
+      });
+      map.on('mouseleave', 'credito-fill', () => {
+        map.getCanvas().style.cursor = '';
+        hoveredId = '';
+        map.setFilter('credito-highlight-halo', buildHighlightFilter(''));
+        map.setFilter('credito-highlight', buildHighlightFilter(''));
+      });
+
+      // Popup
+      map.on('click', 'credito-fill', (e) => {
+        const p = e.features?.[0]?.properties || {};
+        let rows = '';
+        for (const [label, key] of POPUP_FIELDS) {
+          const v = p[key];
+          if (v === undefined || v === null || v === '') continue;
+          const val = /(r\$)|cr|ha/i.test(label) ? fmtNum(v) : safe(v);
+          rows += `<tr><th>${label}</th><td>${val}</td></tr>`;
+        }
+        new mapboxgl.Popup({ maxWidth: '520px' })
+          .setLngLat(e.lngLat)
+          .setHTML(`<table>${rows || '<tr><td>Sem atributos.</td></tr>'}</table>`)
+          .addTo(map);
+      });
+
+      // TI/UC toggle (do style)
+      const tiLayers = getStyleLayerIdsByRegex(/ind[ií]g|terras?_ind[ií]genas|(^|[-_])ti($|[-_])/i);
+      const ucLayers = getStyleLayerIdsByRegex(/unidades?-?de-?conserva[cç][aã]o|cnuc|conservation/i);
+      const tiCheckbox = document.getElementById('toggle-ti');
+      const ucCheckbox = document.getElementById('toggle-uc');
+      setLayersVisibility(tiLayers, tiCheckbox.checked);
+      setLayersVisibility(ucLayers, ucCheckbox.checked);
+      tiCheckbox.addEventListener('change', () => setLayersVisibility(tiLayers, tiCheckbox.checked));
+      ucCheckbox.addEventListener('change', () => setLayersVisibility(ucLayers, ucCheckbox.checked));
+
+      // UF dropdown
+      document.getElementById('state-select').addEventListener('change', (e) => {
+        selectedUF = e.target.value || '';
+        applyAll();
+        const bbox = selectedUF ? (UF_BOUNDS[selectedUF] || AMAZ_BOUNDS) : AMAZ_BOUNDS;
+        map.fitBounds(bbox, { padding: 40, duration: 600, maxZoom: selectedUF ? 10 : 4.36 });
+      });
+
+      // Zoom BR reset
+      document.getElementById('zoom-br').addEventListener('click', () => {
+        selectedUF = '';
+        const ufSel = document.getElementById('state-select');
+        if (ufSel) ufSel.value = '';
+
+        selectedIF = '';
+        const ifSel = document.getElementById('inst-filter');
+        if (ifSel) ifSel.value = '';
+
+        filtersState.onlyEmbargo = false;
+        filtersState.onlyTI = false;
+        filtersState.onlyUC = false;
+        ['only-embargo','only-ti','only-uc'].forEach(id => document.getElementById(id).checked = false);
+
+        applyAll();
+        map.fitBounds(AMAZ_BOUNDS, { padding: 40, duration: 600, maxZoom: 4.36 });
+      });
+
+      // Aplicar filtros
+      document.getElementById('apply-filters').addEventListener('click', () => {
+        filtersState.onlyEmbargo = document.getElementById('only-embargo').checked;
+        filtersState.onlyTI = document.getElementById('only-ti').checked;
+        filtersState.onlyUC = document.getElementById('only-uc').checked;
+        selectedIF = (document.getElementById('inst-filter').value || '').trim();
+        applyAll();
+      });
+
+      // Reset filtros
+      document.getElementById('reset-filters').addEventListener('click', () => {
+        ['only-embargo','only-ti','only-uc'].forEach(id => { document.getElementById(id).checked = false; });
+        const ifSel = document.getElementById('inst-filter');
+        if (ifSel) ifSel.value = '';
+
+        filtersState.onlyEmbargo = false;
+        filtersState.onlyTI = false;
+        filtersState.onlyUC = false;
+
+        selectedIF = '';
+
+        setHint(selectedUF ? `UF selecionada: ${selectedUF}.` : `Selecione UF (opcional) e use os filtros.`);
+        applyAll();
+      });
+
+      // IF change
+      document.getElementById('inst-filter').addEventListener('change', (e) => {
+        selectedIF = (e.target.value || '').trim();
+        applyAll();
+      });
+
+      // Search (renderizado)
+      document.getElementById('search').addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter') return;
+        const term = ev.target.value.trim().toUpperCase();
+        if (!term) return;
+
+        const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
+        const match = feats.find(f => String(f.properties?.[FIELDS.cod_imovel] || '').toUpperCase() === term);
+
+        if (match) {
+          const bbox = turf.bbox(match);
+          map.fitBounds(bbox, { padding: 40, duration: 600 });
+        } else {
+          alert('cod_imovel não encontrado no renderizado. Dica: aproxime/arraste e tente de novo.');
+        }
+      });
+
+      // Download CSV renderizado
+      function downloadCSVRendered() {
+        const feats = map.queryRenderedFeatures({ layers: ['credito-fill'] }) || [];
+        if (!feats.length) { alert('Sem resultados renderizados para exportar.'); return; }
+
+        const lines = ['cod_imovel,municipio,cod_estado,nome_if,vl_parc_credito_sum,desmatamento_ha,interf_TI,interf_UC,Embargo'];
+        const esc = (s) => `"${String(s ?? '').replace(/"/g,'""')}"`;
+
+        for (const f of feats) {
+          const p = f.properties || {};
+          lines.push([
+            esc(p[FIELDS.cod_imovel]),
+            esc(p[FIELDS.municipio]),
+            esc(p[FIELDS.cod_estado]),
+            esc(p[FIELDS.nome_if]),
+            esc(p[FIELDS.total_CR]),
+            esc(p[FIELDS.desmate]),
+            esc(p[FIELDS.TI]),
+            esc(p[FIELDS.UC]),
+            esc(p[FIELDS.Embargo])
+          ].join(','));
+        }
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `resultado_renderizado${selectedUF ? '_' + selectedUF : ''}.csv`; a.click();
+        URL.revokeObjectURL(url);
       }
-      new mapboxgl.Popup({ maxWidth: '480px' })
-        .setLngLat(e.lngLat)
-        .setHTML(`<table>${rows || '<tr><td>Sem atributos.</td></tr>'}</table>`)
-        .addTo(map);
-    });
+      document.getElementById('download-csv').addEventListener('click', downloadCSVRendered);
 
-    const tiLayers = getStyleLayerIdsByRegex(/ind[ií]g|terras?_ind[ií]genas|(^|[-_])ti($|[-_])/i);
-    const ucLayers = getStyleLayerIdsByRegex(/unidades?-?de-?conserva[cç][aã]o|cnuc|conservation/i);
-    const tiCheckbox = document.getElementById('toggle-ti');
-    const ucCheckbox = document.getElementById('toggle-uc');
-    setLayersVisibility(tiLayers, tiCheckbox.checked);
-    setLayersVisibility(ucLayers, ucCheckbox.checked);
-    tiCheckbox.addEventListener('change', () => setLayersVisibility(tiLayers, tiCheckbox.checked));
-    ucCheckbox.addEventListener('change', () => setLayersVisibility(ucLayers, ucCheckbox.checked));
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 
-    document.getElementById('search').addEventListener('keydown', (ev) => {
-      if (ev.key !== 'Enter') return;
-      const term = ev.target.value.trim().toUpperCase(); if (!term) return;
-      const match = allRecords.find(r => (r.cod || '').toUpperCase() === term);
-      if (match) { map.fitBounds(match.bbox, { padding: 40, duration: 600 }); }
-      else { alert('cod_imovel não encontrado no dataset.'); }
-    });
+      // Modal
+      const modal = document.getElementById('info-modal');
+      document.getElementById('close-modal').addEventListener('click', () => modal.style.display = 'none');
+      document.getElementById('open-modal').addEventListener('click', () => modal.style.display = 'flex');
+      modal.style.display = 'flex';
 
-    const embargoInput = document.getElementById('search-embargo');
-    embargoInput.addEventListener('input', (ev) => updateEmbargoSuggestions(ev.target.value.trim()));
-    embargoInput.addEventListener('keydown', (ev) => {
-      if (ev.key !== 'Enter') return;
-      const term = ev.target.value.trim().toLowerCase(); if (!term) return;
-      const match = allRecords.find(r => (r.embNome || '').toLowerCase().includes(term));
-      if (match) { map.fitBounds(match.bbox, { padding: 40, duration: 600 }); }
-      else { alert('Nome de autuado não encontrado no dataset.'); }
-    });
+      // primeira carga
+      await sleep(50);
+      applyAll();
 
-    document.getElementById('zoom-br').addEventListener('click', () => {
-      map.fitBounds([[-74, -17], [-44, 6]], { padding: 40, duration: 600, maxZoom: 4.36 });
-    });
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao configurar tileset/Supabase. Veja o console.\n\n' + (err?.message || err));
+    }
 
-    document.getElementById('apply-filters').addEventListener('click', () => {
-      filtersState.onlyEmbargo = document.getElementById('only-embargo').checked;
-      filtersState.onlyTI = document.getElementById('only-ti').checked;
-      filtersState.onlyUC = document.getElementById('only-uc').checked;
-      cnpjFilterState.value = document.getElementById('inst-filter').value;
-      cnpjFilterState.valueLower = cnpjFilterState.value.trim().toLowerCase();
-      applyFilters();
-    });
-
-    document.getElementById('reset-filters').addEventListener('click', () => {
-      ['only-embargo','only-ti','only-uc'].forEach(id => { const el = document.getElementById(id); el.checked = false; });
-      document.getElementById('inst-filter').value = '';
-      filtersState.onlyEmbargo = false; filtersState.onlyTI = false; filtersState.onlyUC = false;
-      cnpjFilterState.value = ''; cnpjFilterState.valueLower = '';
-      applyFilters();
-    });
-
-    document.getElementById('download-csv').addEventListener('click', downloadCSV);
-    document.getElementById('inst-filter').addEventListener('change', (e) => {
-      cnpjFilterState.value = e.target.value;
-      cnpjFilterState.valueLower = cnpjFilterState.value.trim().toLowerCase();
-      applyFilters();
-    });
-
-    map.on('moveend', scheduleUpdates);
-    map.on('zoomend', scheduleUpdates);
-
-    await buildAllRecords();
-    scheduleUpdates();
-
-    // Controles padrão de zoom
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
-
-    // Modal de informação inicial
-    const modal = document.getElementById('info-modal');
-    const closeModal = document.getElementById('close-modal');
-    const openModal = () => { modal.style.display = 'flex'; };
-    const hideModal = () => { modal.style.display = 'none'; };
-    closeModal.addEventListener('click', hideModal);
-    openModal();
-
-  } catch (err) {
-    console.error(err);
-    alert('Erro ao configurar o tileset/layers. Veja o console.');
-  }
-
-  map.on('error', (e) => console.error('Mapbox error:', e && e.error));
-});
+    map.on('error', (e) => console.error('Mapbox error:', e && e.error));
+  });
 </script>
 </body>
 </html>
